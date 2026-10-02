@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ITsMagic-like 3D Engine – Web Prototype</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0d0d0d;--panel:#161616;--panel2:#1c1c1c;--border:#2a2a2a;--accent:#00b4ff;--text:#e0e0e0;--muted:#888;--hover:#2a2a2a;--success:#4caf50}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+    .top-bar{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);height:40px;padding:0 10px;border-bottom:1px solid var(--border);flex-shrink:0;z-index:20}
+    .left-tools{display:flex;gap:3px}
+    .tool-btn{width:30px;height:28px;background:#2c2c2c;border:none;border-radius:5px;color:#bbb;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px}
+    .tool-btn:hover{background:#3a3a3a;color:#fff}
+    .center-play{display:flex}
+    .play-btn{width:34px;height:26px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent)}
+    .play-btn:first-child{border-radius:4px 0 0 4px}
+    .play-btn:last-child{border-radius:0 4px 4px 0;background:#0090cc}
+    .play-btn.playing{background:#ff4444!important}
+    .right-area{display:flex;align-items:center;gap:10px}
+    .version{font-size:11px;color:var(--muted)}
+    .coins{display:flex;flex-direction:column;font-size:10px;color:#aaa;line-height:1.15;text-align:right}
+    .plus-btn{width:26px;height:26px;background:var(--accent);border:none;border-radius:5px;color:#fff;font-size:16px;font-weight:bold;cursor:pointer}
+    .login{display:flex;align-items:center;gap:5px;background:none;border:none;color:#ccc;font-size:12px;cursor:pointer}
+    .avatar{width:24px;height:24px;background:#333;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+    .tab-bar{display:flex;align-items:center;background:#121212;height:34px;padding:0 8px;gap:2px;border-bottom:1px solid var(--border);flex-shrink:0;z-index:20}
+    .tab{display:flex;align-items:center;gap:6px;padding:5px 12px;font-size:12.5px;color:#999;background:transparent;border:none;border-radius:5px 5px 0 0;cursor:pointer;position:relative}
+    .tab.active{background:var(--panel);color:#fff}
+    .tab.active::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;background:var(--accent)}
+    .dot{width:5px;height:5px;border-radius:50%;background:#555}
+    .tab.active .dot{background:var(--accent)}
+    .main{flex:1;display:flex;overflow:hidden;position:relative}
+    .left-panel{width:230px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;z-index:10}
+    .panel-header{padding:8px 12px;font-size:12px;font-weight:600;color:#ccc;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .panel-header button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:16px}
+    .hierarchy{flex:1;overflow-y:auto;padding:4px 0;font-size:12.5px}
+    .hier-item{padding:5px 10px 5px 12px;cursor:pointer;display:flex;align-items:center;gap:6px;color:#bbb;user-select:none}
+    .hier-item:hover{background:var(--hover)}
+    .hier-item.selected{background:#1e3a4a;color:#fff}
+    .hier-item .icon{font-size:12px;opacity:.8;width:16px;text-align:center}
+    .hier-item.child{padding-left:28px}
+    .center{flex:1;display:flex;flex-direction:column;position:relative;background:#000;min-width:0}
+    .viewport-wrap{flex:1;position:relative;overflow:hidden}
+    #three-canvas{width:100%;height:100%;display:block;outline:none}
+    .view-label{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.55);padding:3px 10px;border-radius:4px;font-size:11px;color:#ccc;pointer-events:none}
+    .play-badge{position:absolute;top:10px;left:10px;background:#ff4444;color:#fff;font-size:11px;font-weight:600;padding:3px 10px;border-radius:4px;display:none}
+    .play-badge.show{display:block}
+    .code-view{flex:1;display:none;flex-direction:column}
+    .code-view.active{display:flex}
+    .code-header{display:flex;background:#1a1a1a;border-bottom:1px solid var(--border);padding:0 8px;height:32px;align-items:center;gap:4px;flex-shrink:0}
+    .code-tab{padding:4px 12px;font-size:12px;color:#aaa;cursor:pointer;border-radius:4px 4px 0 0}
+    .code-tab.active{background:#222;color:#fff}
+    .code-area{flex:1;background:#0f0f0f;color:#d4d4d4;font-family:Consolas,Monaco,monospace;font-size:13px;padding:12px;border:none;outline:none;resize:none;line-height:1.5}
+    .console{height:120px;background:#0a0a0a;border-top:1px solid var(--border);overflow-y:auto;padding:8px 12px;font-family:monospace;font-size:12px;color:#aaa;flex-shrink:0}
+    .console .log{margin-bottom:2px}
+    .console .log.info{color:#4fc3f7}
+    .console .log.warn{color:#ffc107}
+    .console .log.error{color:#ff6b6b}
+    .right-panel{width:270px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;z-index:10}
+    .inspector{flex:1;overflow-y:auto;padding:6px 0;font-size:12.5px}
+    .insp-section{border-bottom:1px solid var(--border);padding:8px 12px}
+    .insp-section h4{font-size:10px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;letter-spacing:.5px}
+    .prop{display:flex;align-items:center;margin-bottom:5px;gap:6px}
+    .prop label{width:68px;color:#aaa;flex-shrink:0;font-size:12px}
+    .prop input[type=number],.prop input[type=text],.prop select{flex:1;background:#222;border:1px solid #333;color:#eee;padding:3px 5px;border-radius:3px;font-size:12px;min-width:0}
+    .prop input:focus{outline:1px solid var(--accent)}
+    .vec3{display:flex;gap:3px;flex:1}
+    .vec3 input{width:100%;text-align:center}
+    .comp-header{display:flex;justify-content:space-between;align-items:center;background:#1a1a1a;padding:5px 10px;margin:0 -12px 8px;cursor:pointer;font-weight:500}
+    .comp-header .remove-comp{color:#ff6b6b;font-size:11px;cursor:pointer;opacity:.7}
+    .comp-header .remove-comp:hover{opacity:1}
+    .add-comp{margin:10px 12px;padding:7px;background:#222;border:1px dashed #444;color:var(--accent);text-align:center;border-radius:4px;cursor:pointer;font-size:12px}
+    .add-comp:hover{background:#2a2a2a}
+    .comp-menu{display:none;position:fixed;background:#222;border:1px solid #444;border-radius:6px;padding:4px 0;z-index:50;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+    .comp-menu.show{display:block}
+    .comp-menu div{padding:6px 14px;cursor:pointer;font-size:12px;color:#ccc}
+    .comp-menu div:hover{background:#333;color:#fff}
+    .assets-panel{height:150px;background:var(--panel);border-top:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;z-index:15}
+    .assets-panel.collapsed{height:28px}
+    .assets-header{height:28px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:#ccc;cursor:pointer;border-bottom:1px solid var(--border)}
+    .assets-body{flex:1;overflow-x:auto;overflow-y:hidden;display:flex;gap:10px;padding:10px 12px;align-items:center}
+    .assets-panel.collapsed .assets-body{display:none}
+    .asset-card{width:90px;height:100px;background:#1a1a1a;border:1px solid #333;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:border-color .15s}
+    .asset-card:hover{border-color:var(--accent)}
+    .asset-card .thumb{width:48px;height:48px;background:#252525;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:6px}
+    .asset-card .name{font-size:11px;color:#aaa;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .asset-import{width:90px;height:100px;border:1px dashed #444;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--accent);font-size:12px;flex-shrink:0}
+    .asset-import:hover{border-color:var(--accent);background:#1a1a1a}
+    .bottom-bar{height:26px;background:var(--panel2);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 12px;font-size:11px;color:var(--muted);flex-shrink:0;gap:14px;z-index:20}
+    .status-dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:100}
+    .modal-overlay.show{display:flex}
+    .modal{background:#1e1e1e;border:1px solid #333;border-radius:8px;width:400px;max-width:90%;padding:20px}
+    .modal h3{margin-bottom:10px;font-size:16px}
+    .modal p{font-size:13px;color:#aaa;margin-bottom:16px;line-height:1.45}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end}
+    .modal-actions button{padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:13px}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-secondary{background:#333;color:#ccc}
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="left-tools">
+      <button class="tool-btn" title="Menu" onclick="alert('Menu')">⊞</button>
+      <button class="tool-btn" title="Salvar" onclick="saveProject()">💾</button>
+      <button class="tool-btn" title="Novo" onclick="newProject()">📄+</button>
+      <button class="tool-btn" title="Store" onclick="alert('Asset Store')">🛒</button>
+      <button class="tool-btn" title="Importar modelo 3D (GLTF/OBJ/FBX)" onclick="document.getElementById('modelInput').click()">⬇</button>
+      <button class="tool-btn" title="Exportar" onclick="exportGame()">📤</button>
+    </div>
+    <div class="center-play">
+      <button class="play-btn" id="btnStop" title="Stop" onclick="stopPlay()">■</button>
+      <button class="play-btn" id="btnPlay" title="Play" onclick="togglePlay()">▶</button>
+    </div>
+    <div class="right-area">
+      <span class="version">v0.2000 Beta • Three.js</span>
+      <div class="coins"><span>💵 0</span><span>🪙 0</span></div>
+      <button class="plus-btn">+</button>
+      <button class="login"><div class="avatar">👤</div> Log-in</button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <button class="tab active" data-tab="editor" onclick="switchTab('editor')"><span class="dot"></span> 3D Editor</button>
+    <button class="tab" data-tab="game" onclick="switchTab('game')"><span class="dot"></span> Game</button>
+    <button class="tab" data-tab="code" onclick="switchTab('code')"><span class="dot"></span> Codificação</button>
+  </div>
+
+  <div class="main">
+    <div class="left-panel" id="leftPanel">
+      <div class="panel-header">
+        Hierarchy
+        <span style="display:flex;gap:6px;align-items:center">
+          <button title="Excluir selecionado (Del)" onclick="deleteSelected()" style="color:#ff6b6b;font-size:13px">🗑</button>
+          <button title="Add" onclick="showAddMenu()">+</button>
+        </span>
+      </div>
+      <div class="hierarchy" id="hierarchy"></div>
+    </div>
+    <div class="center">
+      <div class="viewport-wrap" id="viewportWrap">
+        <canvas id="three-canvas"></canvas>
+        <div class="view-label" id="viewLabel">3D Editor • Clique para selecionar • Arraste o gizmo</div>
+        <div class="play-badge" id="playBadge">PLAYING</div>
+      </div>
+      <div class="code-view" id="viewCode">
+        <div class="code-header">
+          <div class="code-tab active" onclick="switchScript('PlayerController',this)">PlayerController.java</div>
+          <div class="code-tab" onclick="switchScript('GameManager',this)">GameManager.java</div>
+          <div class="code-tab" onclick="alert('Novo script')">+</div>
+        </div>
+        <textarea class="code-area" id="codeEditor" spellcheck="false"></textarea>
+        <div class="console" id="console"></div>
+      </div>
+    </div>
+    <div class="right-panel" id="rightPanel">
+      <div class="panel-header">Inspector <span style="font-size:11px;color:#666" id="selectedName">—</span></div>
+      <div class="inspector" id="inspector"><div style="padding:20px;color:#666;text-align:center;font-size:12px">Selecione um objeto</div></div>
+    </div>
+  </div>
+
+  <div class="assets-panel" id="assetsPanel">
+    <div class="assets-header" onclick="toggleAssets()"><span>📦 Assets</span><span id="assetsToggle">▼</span></div>
+    <div class="assets-body" id="assetsBody"></div>
+  </div>
+
+  <div class="bottom-bar">
+    <span class="status-dot"></span>
+    <span id="statusText">Carregando Three.js...</span>
+    <span style="margin-left:auto" id="statsText">FPS: — • Objetos: 0</span>
+  </div>
+
+  <input type="file" id="modelInput" accept=".gltf,.glb,.obj,.fbx" style="display:none" onchange="importModel(event)">
+  <input type="file" id="textureInput" accept="image/*" style="display:none" onchange="applyTexture(event)">
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h3 id="modalTitle">Título</h3>
+      <p id="modalMsg">Msg</p>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn-primary" onclick="closeModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js r128 UMD + loaders -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+
+  <script>
+  // ========== STATE ==========
+  let scene, camera, renderer, controls, transformControls;
+  let playCamera; // camera usada no modo Play / Game
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  let isPlaying = false;
+  let selectedId = null;
+  const objectMap = {};
+  let nextId = 1;
+  const clock = new THREE.Clock();
+  let frameCount = 0, lastFpsTime = 0, fps = 0;
+  // Input para jogabilidade
+  const keys = {};
+  let playerVelocityY = 0;
+  let playerId = null;
+  let editorCamPos = null, editorCamTarget = null;
+  let currentTab = 'editor';
+
+  // ========== INIT ==========
+  function initThree() {
+    const canvas = document.getElementById('three-canvas');
+    const wrap = document.getElementById('viewportWrap');
+
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0a0a12);
+    scene.fog = new THREE.FogExp2(0x0a0a12, 0.018);
+
+    camera = new THREE.PerspectiveCamera(55, wrap.clientWidth / wrap.clientHeight, 0.1, 200);
+    camera.position.set(0, 8, 18);
+
+    controls = new THREE.OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.target.set(0, 2, 0);
+    controls.maxPolarAngle = Math.PI * 0.49;
+
+    transformControls = new THREE.TransformControls(camera, canvas);
+    transformControls.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+    transformControls.addEventListener('objectChange', () => {
+      if (selectedId && objectMap[selectedId]) {
+        const m = objectMap[selectedId].mesh;
+        const d = objectMap[selectedId].data;
+        d.pos = [rnd(m.position.x), rnd(m.position.y), rnd(m.position.z)];
+        d.rot = [rnd(THREE.MathUtils.radToDeg(m.rotation.x)), rnd(THREE.MathUtils.radToDeg(m.rotation.y)), rnd(THREE.MathUtils.radToDeg(m.rotation.z))];
+        d.scale = [rnd(m.scale.x), rnd(m.scale.y), rnd(m.scale.z)];
+        renderInspector();
+      }
+    });
+    scene.add(transformControls);
+
+    // Lights (mais fortes para a cena nao ficar preta)
+    scene.add(new THREE.AmbientLight(0x6688aa, 0.7));
+    const dir = new THREE.DirectionalLight(0xfff5e0, 1.8);
+    dir.position.set(10, 20, 8);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(2048, 2048);
+    dir.shadow.camera.near = 0.5;
+    dir.shadow.camera.far = 80;
+    dir.shadow.camera.left = dir.shadow.camera.bottom = -30;
+    dir.shadow.camera.right = dir.shadow.camera.top = 30;
+    scene.add(dir);
+    const fill = new THREE.PointLight(0x66aaff, 1.2, 50);
+    fill.position.set(-8, 6, 10);
+    scene.add(fill);
+    const hemi = new THREE.HemisphereLight(0x8899bb, 0x332211, 0.45);
+    scene.add(hemi);
+
+    // Initial content
+    try {
+      createTerrain();
+      createArches();
+      createPlayer();
+      createCameraMarker();
+    } catch (err) {
+      console.error(err);
+      logConsole('error', 'Erro ao criar cena: ' + err.message);
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('resize', onResize);
+    animate();
+
+    setStatus('Editor pronto • Terreno + mapa inicial carregados');
+    logConsole('info', 'Three.js OK');
+    logConsole('info', 'Terreno criado. Clique nos objetos para selecionar. Use o gizmo para mover/rodar/escalar.');
+    rebuildHierarchy();
+    buildAssetsPanel();
+  }
+
+  function rnd(v) { return Math.round(v * 100) / 100; }
+
+  // ========== CREATE OBJECTS ==========
+  function createObject(name, type, mesh, components) {
+    const id = 'obj_' + (nextId++);
+    const data = {
+      id, name, type,
+      pos: [mesh.position.x, mesh.position.y, mesh.position.z],
+      rot: [THREE.MathUtils.radToDeg(mesh.rotation.x), THREE.MathUtils.radToDeg(mesh.rotation.y), THREE.MathUtils.radToDeg(mesh.rotation.z)],
+      scale: [mesh.scale.x, mesh.scale.y, mesh.scale.z],
+      visible: true
+    };
+    mesh.userData.id = id;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    objectMap[id] = { data, mesh, components: components || [] };
+    scene.add(mesh);
+    if (type === 'Character' && name === 'Player') playerId = id;
+    return id;
+  }
+
+  function createTerrain() {
+    const geo = new THREE.PlaneBufferGeometry(50, 50, 80, 80);
+    const pos = geo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i);
+      const h = Math.sin(x * 0.25) * 0.2 + Math.cos(y * 0.2) * 0.15 + Math.sin(x * 0.1 + y * 0.1) * 0.1;
+      pos.setZ(i, h);
+    }
+    geo.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ color: 0x5a5a48, roughness: 0.9, metalness: 0.02 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.receiveShadow = true;
+    createObject('Terrain', 'Terrain', mesh, [
+      { type: 'MeshRenderer', props: { material: 'Standard', color: '#5a5a48' } },
+      { type: 'Collider', props: { shape: 'Mesh' } }
+    ]);
+  }
+
+  function createArches() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x7a7a70, roughness: 0.75, metalness: 0.05 });
+    for (let i = 0; i < 5; i++) {
+      const z = i * 7 - 7;
+      const left = new THREE.Mesh(new THREE.BoxBufferGeometry(1.4, 4.5, 1.4), mat.clone());
+      left.position.set(-4, 2.25, z);
+      createObject('Pillar_L' + i, 'Mesh', left, [
+        { type: 'MeshRenderer', props: { material: 'Standard' } },
+        { type: 'Collider', props: { shape: 'Box' } }
+      ]);
+      const right = new THREE.Mesh(new THREE.BoxBufferGeometry(1.4, 4.5, 1.4), mat.clone());
+      right.position.set(4, 2.25, z);
+      createObject('Pillar_R' + i, 'Mesh', right, [
+        { type: 'MeshRenderer', props: { material: 'Standard' } },
+        { type: 'Collider', props: { shape: 'Box' } }
+      ]);
+      const top = new THREE.Mesh(new THREE.BoxBufferGeometry(9.4, 1.1, 1.4), mat.clone());
+      top.position.set(0, 5, z);
+      createObject('ArchTop_' + i, 'Mesh', top, [
+        { type: 'MeshRenderer', props: { material: 'Standard' } },
+        { type: 'Collider', props: { shape: 'Box' } }
+      ]);
+    }
+  }
+
+  function createPlayer() {
+    // CapsuleBufferGeometry nao existe no Three r128 → cilindro + esferas
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.5, metalness: 0.25 });
+    const group = new THREE.Group();
+    const torso = new THREE.Mesh(new THREE.CylinderBufferGeometry(0.4, 0.4, 1.0, 12), mat);
+    const top = new THREE.Mesh(new THREE.SphereBufferGeometry(0.4, 12, 10), mat);
+    top.position.y = 0.7;
+    const bottom = new THREE.Mesh(new THREE.SphereBufferGeometry(0.4, 12, 10), mat);
+    bottom.position.y = -0.7;
+    group.add(torso);
+    group.add(top);
+    group.add(bottom);
+    group.position.set(0, 1.5, 5);
+    group.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    createObject('Player', 'Character', group, [
+      { type: 'MeshRenderer', props: { material: 'Standard', color: '#4488ff' } },
+      { type: 'Rigidbody', props: { mass: 1, useGravity: true } },
+      { type: 'Collider', props: { shape: 'Capsule' } },
+      { type: 'Script', props: { className: 'PlayerController' } }
+    ]);
+  }
+
+  function createCameraMarker() {
+    const helper = new THREE.Mesh(
+      new THREE.ConeBufferGeometry(0.35, 0.7, 4),
+      new THREE.MeshStandardMaterial({ color: 0xffaa00 })
+    );
+    helper.position.set(0, 2.8, 13);
+    helper.rotation.x = Math.PI;
+    createObject('Main Camera', 'Camera', helper, [
+      { type: 'Camera', props: { fov: 55, near: 0.1, far: 200 } }
+    ]);
+  }
+
+  // ========== HIERARCHY ==========
+  function rebuildHierarchy() {
+    const hier = document.getElementById('hierarchy');
+    hier.innerHTML = '';
+    const sceneItem = document.createElement('div');
+    sceneItem.className = 'hier-item' + (selectedId === null ? ' selected' : '');
+    sceneItem.innerHTML = '<span class="icon">🌐</span> Scene';
+    sceneItem.onclick = () => selectObject(null);
+    hier.appendChild(sceneItem);
+
+    Object.values(objectMap).forEach(obj => {
+      const div = document.createElement('div');
+      div.className = 'hier-item child' + (selectedId === obj.data.id ? ' selected' : '');
+      div.style.justifyContent = 'space-between';
+      const icons = { Terrain: '🏔️', Mesh: '📦', Character: '🧍', Camera: '📷', Light: '💡' };
+      const left = document.createElement('span');
+      left.style.display = 'flex';
+      left.style.alignItems = 'center';
+      left.style.gap = '6px';
+      left.style.opacity = obj.data.visible === false ? '0.4' : '1';
+      left.innerHTML = `<span class="icon">${icons[obj.data.type] || '📦'}</span> ${obj.data.name}`;
+      left.onclick = () => selectObject(obj.data.id);
+
+      const actions = document.createElement('span');
+      actions.style.display = 'flex';
+      actions.style.gap = '2px';
+      actions.style.alignItems = 'center';
+
+      const visBtn = document.createElement('button');
+      visBtn.title = obj.data.visible === false ? 'Mostrar' : 'Ocultar';
+      visBtn.textContent = obj.data.visible === false ? '🙈' : '👁';
+      visBtn.style.cssText = 'background:none;border:none;cursor:pointer;font-size:12px;opacity:0.6;padding:0 3px;';
+      visBtn.onmouseenter = () => { visBtn.style.opacity = '1'; };
+      visBtn.onmouseleave = () => { visBtn.style.opacity = '0.6'; };
+      visBtn.onclick = (e) => {
+        e.stopPropagation();
+        toggleVisibility(obj.data.id);
+      };
+
+      const delBtn = document.createElement('button');
+      delBtn.title = 'Excluir objeto';
+      delBtn.textContent = '🗑';
+      delBtn.style.cssText = 'background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:12px;opacity:0.5;padding:0 4px;';
+      delBtn.onmouseenter = () => { delBtn.style.opacity = '1'; };
+      delBtn.onmouseleave = () => { delBtn.style.opacity = '0.5'; };
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteObject(obj.data.id);
+      };
+
+      actions.appendChild(visBtn);
+      actions.appendChild(delBtn);
+      div.appendChild(left);
+      div.appendChild(actions);
+      div.onclick = () => selectObject(obj.data.id);
+      hier.appendChild(div);
+    });
+    document.getElementById('statsText').textContent = `FPS: ${fps} • Objetos: ${Object.keys(objectMap).length}`;
+  }
+
+  function deleteObject(id) {
+    if (!id || !objectMap[id]) return;
+    const name = objectMap[id].data.name;
+    // Remove da cena 3D
+    const mesh = objectMap[id].mesh;
+    if (selectedId === id) {
+      transformControls.detach();
+      setEmissive(mesh, 0x000000);
+      selectedId = null;
+      document.getElementById('selectedName').textContent = 'Scene';
+    }
+    scene.remove(mesh);
+    // Dispose geometry/material se for Mesh
+    if (mesh.geometry) mesh.geometry.dispose();
+    if (mesh.material) {
+      if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
+      else mesh.material.dispose();
+    }
+    if (mesh.traverse) {
+      mesh.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) {
+          if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+          else c.material.dispose();
+        }
+      });
+    }
+    delete objectMap[id];
+    rebuildHierarchy();
+    renderInspector();
+    logConsole('info', 'Objeto excluído: ' + name);
+  }
+
+  function deleteSelected() {
+    if (!selectedId) {
+      logConsole('warn', 'Nenhum objeto selecionado para excluir');
+      return;
+    }
+    deleteObject(selectedId);
+  }
+
+  function toggleVisibility(id) {
+    if (!id || !objectMap[id]) return;
+    const obj = objectMap[id];
+    const vis = obj.data.visible !== false;
+    obj.data.visible = !vis;
+    obj.mesh.visible = !vis;
+    rebuildHierarchy();
+    logConsole('info', (vis ? 'Ocultado: ' : 'Mostrado: ') + obj.data.name);
+  }
+
+  // Teclado: Delete exclui | WASD move no Play
+  window.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    keys[e.code] = true;
+    if (e.key === 'Delete') {
+      e.preventDefault();
+      deleteSelected();
+    }
+    // H oculta/mostra selecionado
+    if (e.key === 'h' || e.key === 'H') {
+      if (selectedId) toggleVisibility(selectedId);
+    }
+  });
+  window.addEventListener('keyup', function(e) {
+    keys[e.code] = false;
+  });
+
+  // ========== SELECTION ==========
+  function setEmissive(obj, hex) {
+    if (!obj) return;
+    if (obj.material && obj.material.emissive) obj.material.emissive.setHex(hex);
+    if (obj.children) obj.traverse(c => {
+      if (c.isMesh && c.material && c.material.emissive) c.material.emissive.setHex(hex);
+    });
+  }
+
+  function selectObject(id) {
+    if (selectedId && objectMap[selectedId]) {
+      setEmissive(objectMap[selectedId].mesh, 0x000000);
+    }
+    selectedId = id;
+    transformControls.detach();
+
+    if (id && objectMap[id]) {
+      const mesh = objectMap[id].mesh;
+      setEmissive(mesh, 0x113355);
+      transformControls.attach(mesh);
+      document.getElementById('selectedName').textContent = objectMap[id].data.name;
+    } else {
+      document.getElementById('selectedName').textContent = 'Scene';
+    }
+    rebuildHierarchy();
+    renderInspector();
+  }
+
+  function onPointerDown(e) {
+    if (isPlaying || e.button !== 0 || transformControls.dragging) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const meshes = Object.values(objectMap).map(o => o.mesh);
+    const hits = raycaster.intersectObjects(meshes, true);
+    if (hits.length) {
+      let obj = hits[0].object;
+      while (obj && !obj.userData.id) obj = obj.parent;
+      if (obj && obj.userData.id) selectObject(obj.userData.id);
+    } else selectObject(null);
+  }
+
+  // ========== INSPECTOR ==========
+  function renderInspector() {
+    const insp = document.getElementById('inspector');
+    if (!selectedId || !objectMap[selectedId]) {
+      insp.innerHTML = '<div style="padding:20px;color:#666;text-align:center;font-size:12px">Selecione um objeto</div>';
+      return;
+    }
+    const obj = objectMap[selectedId];
+    const d = obj.data;
+    let html = `<div class="insp-section"><h4>Transform</h4>
+      <div class="prop"><label>Position</label><div class="vec3">
+        <input type="number" step="0.1" value="${d.pos[0]}" onchange="updateTransform('pos',0,this.value)">
+        <input type="number" step="0.1" value="${d.pos[1]}" onchange="updateTransform('pos',1,this.value)">
+        <input type="number" step="0.1" value="${d.pos[2]}" onchange="updateTransform('pos',2,this.value)">
+      </div></div>
+      <div class="prop"><label>Rotation</label><div class="vec3">
+        <input type="number" step="1" value="${d.rot[0]}" onchange="updateTransform('rot',0,this.value)">
+        <input type="number" step="1" value="${d.rot[1]}" onchange="updateTransform('rot',1,this.value)">
+        <input type="number" step="1" value="${d.rot[2]}" onchange="updateTransform('rot',2,this.value)">
+      </div></div>
+      <div class="prop"><label>Scale</label><div class="vec3">
+        <input type="number" step="0.1" value="${d.scale[0]}" onchange="updateTransform('scale',0,this.value)">
+        <input type="number" step="0.1" value="${d.scale[1]}" onchange="updateTransform('scale',1,this.value)">
+        <input type="number" step="0.1" value="${d.scale[2]}" onchange="updateTransform('scale',2,this.value)">
+      </div></div></div>`;
+
+    obj.components.forEach((comp, idx) => {
+      html += `<div class="insp-section"><div class="comp-header">
+        <span>${compIcon(comp.type)} ${comp.type}</span>
+        <span class="remove-comp" onclick="removeComponent(${idx})">✕</span></div>`;
+      if (comp.props) Object.entries(comp.props).forEach(([k, v]) => {
+        // texture tem botao proprio, nao mostra input de texto
+        if (k === 'texture') return;
+        if (comp.type === 'MeshRenderer' && k === 'color') {
+          html += `<div class="prop"><label>color</label>
+            <input type="color" value="${v || '#888888'}" style="flex:1;height:26px;border:1px solid #333;border-radius:3px;background:#222;cursor:pointer"
+              onchange="updateCompProp(${idx},'color',this.value); applyColorToMesh(this.value)"></div>`;
+          return;
+        }
+        html += `<div class="prop"><label>${k}</label><input type="text" value="${v}" onchange="updateCompProp(${idx},'${k}',this.value)"></div>`;
+      });
+      if (comp.type === 'MeshRenderer') {
+        const texName = (comp.props && comp.props.texture) ? comp.props.texture : '';
+        html += `<div class="prop"><label>texture</label>
+          <div style="flex:1;display:flex;gap:4px">
+            <button onclick="requestTexture('${selectedId}')" style="flex:1;background:#222;border:1px solid #444;color:#00b4ff;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:11px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              🖼 ${texName ? texName : 'Importar imagem...'}
+            </button>
+            ${texName ? `<button onclick="clearTexture('${selectedId}')" title="Remover textura" style="background:#333;border:1px solid #555;color:#ff6b6b;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:11px">✕</button>` : ''}
+          </div></div>`;
+      }
+      html += `</div>`;
+    });
+
+    html += `<div class="add-comp" onclick="showCompMenu(event)">+ Add Component</div>
+      <div class="comp-menu" id="compMenu">
+        <div onclick="addComponent('MeshRenderer')">MeshRenderer</div>
+        <div onclick="addComponent('Rigidbody')">Rigidbody</div>
+        <div onclick="addComponent('Collider')">Collider</div>
+        <div onclick="addComponent('Script')">Script</div>
+        <div onclick="addComponent('Light')">Light</div>
+        <div onclick="addComponent('AudioSource')">AudioSource</div>
+      </div>`;
+    insp.innerHTML = html;
+  }
+
+  function compIcon(t) {
+    return { MeshRenderer: '🎨', Rigidbody: '⚙️', Collider: '📐', Script: '📜', Light: '💡', AudioSource: '🔊', Camera: '📷' }[t] || '🧩';
+  }
+
+  function updateTransform(prop, idx, val) {
+    if (!selectedId || !objectMap[selectedId]) return;
+    const obj = objectMap[selectedId];
+    obj.data[prop][idx] = parseFloat(val) || 0;
+    const m = obj.mesh;
+    if (prop === 'pos') m.position.set(...obj.data.pos);
+    if (prop === 'rot') m.rotation.set(
+      THREE.MathUtils.degToRad(obj.data.rot[0]),
+      THREE.MathUtils.degToRad(obj.data.rot[1]),
+      THREE.MathUtils.degToRad(obj.data.rot[2])
+    );
+    if (prop === 'scale') m.scale.set(...obj.data.scale);
+  }
+
+  function updateCompProp(compIdx, key, val) {
+    if (!selectedId || !objectMap[selectedId]) return;
+    objectMap[selectedId].components[compIdx].props[key] = val;
+  }
+
+  function applyColorToMesh(hex) {
+    if (!selectedId || !objectMap[selectedId]) return;
+    const mesh = objectMap[selectedId].mesh;
+    const apply = (m) => {
+      if (!m.isMesh || !m.material) return;
+      m.material = m.material.clone();
+      m.material.color = new THREE.Color(hex);
+      m.material.needsUpdate = true;
+    };
+    if (mesh.isMesh) apply(mesh);
+    else if (mesh.traverse) mesh.traverse(apply);
+  }
+
+  function clearTexture(objId) {
+    if (!objId || !objectMap[objId]) return;
+    const mesh = objectMap[objId].mesh;
+    const apply = (m) => {
+      if (!m.isMesh || !m.material) return;
+      m.material = m.material.clone();
+      m.material.map = null;
+      m.material.needsUpdate = true;
+    };
+    if (mesh.isMesh) apply(mesh);
+    else if (mesh.traverse) mesh.traverse(apply);
+    const mr = objectMap[objId].components.find(c => c.type === 'MeshRenderer');
+    if (mr) mr.props.texture = '';
+    renderInspector();
+    logConsole('info', 'Textura removida');
+  }
+
+  function removeComponent(idx) {
+    if (!selectedId || !objectMap[selectedId]) return;
+    objectMap[selectedId].components.splice(idx, 1);
+    renderInspector();
+    logConsole('info', 'Componente removido');
+  }
+
+  function addComponent(type) {
+    if (!selectedId || !objectMap[selectedId]) return;
+    const defaults = {
+      MeshRenderer: { material: 'Standard', color: '#888888', texture: '' },
+      Rigidbody: { mass: 1, useGravity: true },
+      Collider: { shape: 'Box' },
+      Script: { className: 'NewScript' },
+      Light: { intensity: 1, color: '#ffffff' },
+      AudioSource: { clip: 'none', volume: 1 }
+    };
+    objectMap[selectedId].components.push({ type, props: defaults[type] || {} });
+    document.getElementById('compMenu')?.classList.remove('show');
+    renderInspector();
+    logConsole('info', 'Componente ' + type + ' adicionado');
+  }
+
+  function showCompMenu(e) {
+    const menu = document.getElementById('compMenu');
+    if (!menu) return;
+    menu.classList.toggle('show');
+    menu.style.left = Math.min(e.clientX, innerWidth - 180) + 'px';
+    menu.style.top = (e.clientY - 20) + 'px';
+  }
+
+  // ========== ADD / ASSETS ==========
+  function showAddMenu() {
+    const c = prompt('Criar:\n1=Cube  2=Sphere  3=Plane  4=Capsule  5=Cylinder\n\nNúmero:');
+    if (c) spawnPrimitive(c);
+  }
+
+  function spawnPrimitive(type, nameOverride) {
+    const makers = {
+      '1': () => new THREE.Mesh(new THREE.BoxBufferGeometry(1,1,1), new THREE.MeshStandardMaterial({ color: 0x888888 })),
+      '2': () => new THREE.Mesh(new THREE.SphereBufferGeometry(0.5, 16, 12), new THREE.MeshStandardMaterial({ color: 0x88aa88 })),
+      '3': () => { const m = new THREE.Mesh(new THREE.PlaneBufferGeometry(4,4), new THREE.MeshStandardMaterial({ color: 0x666666 })); m.rotation.x = -Math.PI/2; return m; },
+      '4': () => new THREE.Mesh(new THREE.CylinderBufferGeometry(0.35, 0.35, 1.4, 12), new THREE.MeshStandardMaterial({ color: 0xaa8888 })),
+      '5': () => new THREE.Mesh(new THREE.CylinderBufferGeometry(0.5, 0.5, 1.5, 16), new THREE.MeshStandardMaterial({ color: 0x8888aa }))
+    };
+    const names = { '1': 'Cube', '2': 'Sphere', '3': 'Plane', '4': 'Capsule', '5': 'Cylinder' };
+    if (!makers[type]) return;
+    const mesh = makers[type]();
+    mesh.position.set((Math.random()-0.5)*4, 1, (Math.random()-0.5)*4);
+    const id = createObject(nameOverride || names[type], 'Mesh', mesh, [
+      { type: 'MeshRenderer', props: { material: 'Standard' } },
+      { type: 'Collider', props: { shape: 'Box' } }
+    ]);
+    selectObject(id);
+    rebuildHierarchy();
+    logConsole('info', (nameOverride || names[type]) + ' adicionado');
+  }
+
+  function buildAssetsPanel() {
+    const body = document.getElementById('assetsBody');
+    const items = [
+      { name: 'Cube', icon: '⬜', type: '1' },
+      { name: 'Sphere', icon: '⚪', type: '2' },
+      { name: 'Plane', icon: '▭', type: '3' },
+      { name: 'Capsule', icon: '💊', type: '4' },
+      { name: 'Cylinder', icon: '🛢️', type: '5' },
+      { name: 'Terrain', icon: '🏔️', type: 'terrain' }
+    ];
+    body.innerHTML = '';
+    items.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'asset-card';
+      card.innerHTML = `<div class="thumb">${p.icon}</div><div class="name">${p.name}</div>`;
+      card.onclick = () => {
+        if (p.type === 'terrain') { createTerrain(); rebuildHierarchy(); logConsole('info', 'Novo Terrain'); }
+        else spawnPrimitive(p.type, p.name);
+      };
+      body.appendChild(card);
+    });
+    const imp = document.createElement('div');
+    imp.className = 'asset-import';
+    imp.innerHTML = '<div style="font-size:22px;margin-bottom:6px">📁</div>Importar<br>GLTF/OBJ/FBX';
+    imp.onclick = () => document.getElementById('modelInput').click();
+    body.appendChild(imp);
+  }
+
+  function toggleAssets() {
+    const p = document.getElementById('assetsPanel');
+    p.classList.toggle('collapsed');
+    document.getElementById('assetsToggle').textContent = p.classList.contains('collapsed') ? '▲' : '▼';
+    onResize();
+  }
+
+  function importModel(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const name = file.name.replace(/\.(gltf|glb|obj|fbx)$/i, '');
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    function onLoaded(model) {
+      model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+      const box = new THREE.Box3().setFromObject(model);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z);
+      if (maxDim > 8) model.scale.setScalar(5 / maxDim);
+      if (maxDim < 0.01) model.scale.setScalar(10);
+      const id = createObject(name, 'Mesh', model, [
+        { type: 'MeshRenderer', props: { material: 'Imported', texture: '' } },
+        { type: 'Collider', props: { shape: 'Mesh' } }
+      ]);
+      selectObject(id);
+      rebuildHierarchy();
+      logConsole('info', ext.toUpperCase() + ' importado: ' + file.name);
+      URL.revokeObjectURL(url);
+    }
+
+    function onError(err) {
+      logConsole('error', 'Erro ao importar ' + ext.toUpperCase() + ': ' + (err.message || err));
+      URL.revokeObjectURL(url);
+    }
+
+    if (ext === 'gltf' || ext === 'glb') {
+      new THREE.GLTFLoader().load(url, g => onLoaded(g.scene), undefined, onError);
+    } else if (ext === 'obj') {
+      new THREE.OBJLoader().load(url, onLoaded, undefined, onError);
+    } else if (ext === 'fbx') {
+      new THREE.FBXLoader().load(url, onLoaded, undefined, onError);
+    } else {
+      logConsole('error', 'Formato nao suportado: ' + ext);
+      URL.revokeObjectURL(url);
+    }
+    event.target.value = '';
+  }
+
+  // Texture apply
+  let pendingTextureObjId = null;
+  function requestTexture(objId) {
+    pendingTextureObjId = objId;
+    document.getElementById('textureInput').click();
+  }
+  function applyTexture(event) {
+    const file = event.target.files[0];
+    if (!file || !pendingTextureObjId || !objectMap[pendingTextureObjId]) return;
+    const url = URL.createObjectURL(file);
+    const loader = new THREE.TextureLoader();
+    loader.load(url, tex => {
+      tex.encoding = THREE.sRGBEncoding;
+      const mesh = objectMap[pendingTextureObjId].mesh;
+      const apply = (m) => {
+        if (!m.isMesh) return;
+        if (!m.material) m.material = new THREE.MeshStandardMaterial();
+        // clone material so we don't share
+        m.material = m.material.clone();
+        m.material.map = tex;
+        m.material.needsUpdate = true;
+      };
+      if (mesh.isMesh) apply(mesh);
+      else mesh.traverse(apply);
+      // update component prop
+      const comps = objectMap[pendingTextureObjId].components;
+      const mr = comps.find(c => c.type === 'MeshRenderer');
+      if (mr) mr.props.texture = file.name;
+      renderInspector();
+      logConsole('info', 'Textura aplicada: ' + file.name);
+      URL.revokeObjectURL(url);
+    }, undefined, err => logConsole('error', 'Erro textura: ' + err.message));
+    event.target.value = '';
+    pendingTextureObjId = null;
+  }
+
+  // ========== TABS / PLAY ==========
+  function switchTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.tab[data-tab="'+tab+'"]').classList.add('active');
+    const codeView = document.getElementById('viewCode');
+    const viewport = document.getElementById('viewportWrap');
+    const left = document.getElementById('leftPanel');
+    const right = document.getElementById('rightPanel');
+
+    if (tab === 'code') {
+      codeView.classList.add('active');
+      viewport.style.display = 'none';
+      left.style.display = 'none';
+      right.style.display = 'none';
+      setStatus('Modo Codificação');
+      if (!document.getElementById('codeEditor').value)
+        document.getElementById('codeEditor').value = scripts.PlayerController;
+    } else {
+      codeView.classList.remove('active');
+      viewport.style.display = 'block';
+      if (tab === 'game') {
+        left.style.display = 'none';
+        right.style.display = 'none';
+        document.getElementById('playBadge').classList.add('show');
+        document.getElementById('viewLabel').style.display = 'none';
+        transformControls.visible = false;
+        controls.enabled = false;
+        // Visao da camera do jogador
+        enterPlayerView();
+        setStatus('Modo Game • Visão do Player • WASD mover • Espaço pular');
+      } else {
+        left.style.display = 'flex';
+        right.style.display = 'flex';
+        document.getElementById('playBadge').classList.remove('show');
+        document.getElementById('viewLabel').style.display = 'block';
+        transformControls.visible = true;
+        controls.enabled = true;
+        // Volta camera do editor
+        exitPlayerView();
+        setStatus('Modo 3D Editor');
+      }
+      onResize();
+    }
+  }
+
+  function enterPlayerView() {
+    // Salva posicao da camera do editor
+    if (!editorCamPos) {
+      editorCamPos = camera.position.clone();
+      editorCamTarget = controls.target.clone();
+    }
+    // Esconde o mesh do player na visao (primeira pessoa-ish / terceira proxima)
+    if (playerId && objectMap[playerId]) {
+      // terceira pessoa: camera atras do player
+      updatePlayCamera(0);
+    }
+  }
+
+  function exitPlayerView() {
+    if (editorCamPos) {
+      camera.position.copy(editorCamPos);
+      controls.target.copy(editorCamTarget);
+      controls.update();
+      editorCamPos = null;
+      editorCamTarget = null;
+    }
+    // Garante player visivel de novo
+    if (playerId && objectMap[playerId]) {
+      objectMap[playerId].mesh.visible = objectMap[playerId].data.visible !== false;
+    }
+  }
+
+  function updatePlayCamera(dt) {
+    if (!playerId || !objectMap[playerId]) return;
+    const player = objectMap[playerId].mesh;
+    // Terceira pessoa: atras e acima do player
+    const offset = new THREE.Vector3(0, 3.5, 6);
+    // Rotaciona offset pela rotacao Y do player
+    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+    const desired = player.position.clone().add(offset);
+    camera.position.lerp(desired, Math.min(1, 8 * (dt || 0.016)));
+    const lookAt = player.position.clone();
+    lookAt.y += 1.2;
+    camera.lookAt(lookAt);
+  }
+
+  function updateGameplay(dt) {
+    if (!playerId || !objectMap[playerId]) return;
+    const player = objectMap[playerId].mesh;
+    const speed = 6;
+    const rotSpeed = 2.5;
+
+    // Rotacao com A/D ou setas
+    if (keys['KeyA'] || keys['ArrowLeft']) player.rotation.y += rotSpeed * dt;
+    if (keys['KeyD'] || keys['ArrowRight']) player.rotation.y -= rotSpeed * dt;
+
+    // Movimento W/S no eixo local do player
+    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+    const move = new THREE.Vector3();
+    if (keys['KeyW'] || keys['ArrowUp']) move.add(forward);
+    if (keys['KeyS'] || keys['ArrowDown']) move.sub(forward);
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(speed * dt);
+      player.position.add(move);
+    }
+
+    // Gravidade simples + pulo
+    const grounded = player.position.y <= 1.5;
+    if (grounded) {
+      player.position.y = 1.5;
+      playerVelocityY = 0;
+      if (keys['Space']) playerVelocityY = 7;
+    } else {
+      playerVelocityY -= 18 * dt; // gravidade
+    }
+    player.position.y += playerVelocityY * dt;
+    if (player.position.y < 1.5) {
+      player.position.y = 1.5;
+      playerVelocityY = 0;
+    }
+
+    // Atualiza data
+    objectMap[playerId].data.pos = [rnd(player.position.x), rnd(player.position.y), rnd(player.position.z)];
+    objectMap[playerId].data.rot[1] = rnd(THREE.MathUtils.radToDeg(player.rotation.y));
+  }
+
+  function togglePlay() {
+    if (isPlaying) { stopPlay(); return; }
+    isPlaying = true;
+    playerVelocityY = 0;
+    document.getElementById('btnPlay').classList.add('playing');
+    document.getElementById('btnPlay').textContent = '❚❚';
+    switchTab('game');
+    logConsole('info', '▶ Play iniciado — WASD mover, Espaço pular, A/D girar');
+  }
+
+  function stopPlay() {
+    isPlaying = false;
+    document.getElementById('btnPlay').classList.remove('playing');
+    document.getElementById('btnPlay').textContent = '▶';
+    switchTab('editor');
+    logConsole('info', '■ Play parado');
+  }
+
+  const scripts = {
+    PlayerController: `public class PlayerController extends Component {
+
+    @AutoWired
+    private Rigidbody rigidbody;
+
+    public float speed = 5f;
+    public float jumpForce = 8f;
+
+    @Override
+    public void start() {
+        Console.log("PlayerController iniciado!");
+    }
+
+    @Override
+    public void repeat() {
+        float h = Input.getAxis("Horizontal");
+        float v = Input.getAxis("Vertical");
+
+        if (rigidbody != null) {
+            Vector3 move = new Vector3(h, 0, v).normalizeLocal().mul(speed);
+            rigidbody.setVelocity(move.x, rigidbody.getVelocity().y, move.z);
+        }
+
+        if (Input.getButtonDown("Jump") && isGrounded()) {
+            rigidbody.addForce(0, jumpForce, 0);
+        }
+    }
+
+    private boolean isGrounded() {
+        return true;
+    }
+}`,
+    GameManager: `public class GameManager extends Component {
+
+    public int score = 0;
+    public float timeLeft = 120f;
+
+    @Override
+    public void start() {
+        Console.log("GameManager pronto");
+    }
+
+    @Override
+    public void repeat() {
+        timeLeft -= Time.deltaTime;
+        if (timeLeft <= 0) {
+            Console.log("Tempo esgotado!");
+        }
+    }
+}`
+  };
+
+  function switchScript(name, el) {
+    document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    document.getElementById('codeEditor').value = scripts[name] || '';
+  }
+
+  // ========== UTILS ==========
+  function onResize() {
+    const wrap = document.getElementById('viewportWrap');
+    if (!wrap || !renderer) return;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (w < 10 || h < 10) return;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+
+    if (isPlaying || currentTab === 'game') {
+      if (isPlaying) updateGameplay(dt);
+      updatePlayCamera(dt);
+    } else {
+      controls.update();
+    }
+
+    renderer.render(scene, camera);
+    frameCount++;
+    const now = performance.now();
+    if (now - lastFpsTime > 500) {
+      fps = Math.round(frameCount * 1000 / (now - lastFpsTime));
+      frameCount = 0;
+      lastFpsTime = now;
+      document.getElementById('statsText').textContent = `FPS: ${fps} • Objetos: ${Object.keys(objectMap).length}`;
+    }
+  }
+
+  function setStatus(msg) { document.getElementById('statusText').textContent = msg; }
+  function logConsole(type, msg) {
+    const c = document.getElementById('console');
+    const div = document.createElement('div');
+    div.className = 'log ' + type;
+    div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    c.appendChild(div);
+    c.scrollTop = c.scrollHeight;
+  }
+
+  function saveProject() { logConsole('info', 'Projeto salvo (simulado)'); setStatus('Projeto salvo'); }
+  function newProject() { if (confirm('Novo projeto? A cena atual será perdida.')) location.reload(); }
+  function exportGame() { showModal('Exportar', 'Em uma engine completa você exportaria APK/AAB. Aqui ainda é protótipo web.'); }
+  function showModal(t, m) {
+    document.getElementById('modalTitle').textContent = t;
+    document.getElementById('modalMsg').textContent = m;
+    document.getElementById('modal').classList.add('show');
+  }
+  function closeModal() { document.getElementById('modal').classList.remove('show'); }
+
+  // START
+  document.getElementById('codeEditor').value = scripts.PlayerController;
+
+  function tryInit() {
+    if (typeof THREE === 'undefined') {
+      setStatus('Aguardando Three.js...');
+      setTimeout(tryInit, 200);
+      return;
+    }
+    try {
+      initThree();
+    } catch (err) {
+      console.error(err);
+      setStatus('Erro: ' + err.message);
+      logConsole('error', 'Falha ao iniciar: ' + err.message);
+    }
+  }
+
+  if (document.readyState === 'complete') {
+    tryInit();
+  } else {
+    window.addEventListener('load', tryInit);
+  }
+  </script>
+</body>
+</html>
