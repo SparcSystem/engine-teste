@@ -97,23 +97,47 @@
     .modal-actions button{padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:13px}
     .btn-primary{background:var(--accent);color:#fff}
     .btn-secondary{background:#333;color:#ccc}
+    .proj-list{max-height:240px;overflow-y:auto;border:1px solid #333;border-radius:6px;background:#181818}
+    .proj-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #2a2a2a}
+    .proj-row:last-child{border-bottom:none}
+    .proj-info{flex:1;min-width:0}
+    .proj-name{font-size:13px;color:#eee;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .proj-date{font-size:11px;color:var(--muted)}
+    .proj-empty{padding:16px;text-align:center;font-size:12px;color:#666}
+    .proj-row button{padding:4px 10px;border-radius:4px;border:none;cursor:pointer;font-size:12px;background:#333;color:#ccc}
+    .proj-row button.open{background:var(--accent);color:#fff}
+    .proj-input{flex:1;background:#222;border:1px solid #333;color:#eee;padding:6px 8px;border-radius:4px;font-size:13px;min-width:0}
+    #uiLayer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+    .ui-el{position:absolute;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;pointer-events:auto;user-select:none;border-radius:6px;text-align:center;overflow:hidden;box-sizing:border-box}
+    .ui-el.sel{outline:2px solid var(--accent)}
+    .mini{background:#2c2c2c;border:1px solid #444;color:#ddd;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px}
+    .mini:hover{background:#3a3a3a}
+    .key-row{display:flex;align-items:center;gap:6px;padding:3px 4px;border-bottom:1px solid #2a2a2a;cursor:pointer;font-size:11.5px;color:#bbb}
   </style>
 </head>
 <body>
   <div class="top-bar">
     <div class="left-tools">
       <button class="tool-btn" title="Menu" onclick="alert('Menu')">⊞</button>
-      <button class="tool-btn" title="Salvar" onclick="saveProject()">💾</button>
+      <button class="tool-btn" title="Salvar (Ctrl+S)" onclick="saveProject()">💾</button>
       <button class="tool-btn" title="Novo" onclick="newProject()">📄+</button>
+      <button class="tool-btn" title="Abrir / gerenciar projetos" onclick="openProjModal()">📂</button>
       <button class="tool-btn" title="Store" onclick="alert('Asset Store')">🛒</button>
       <button class="tool-btn" title="Importar modelo 3D (GLTF/OBJ/FBX)" onclick="document.getElementById('modelInput').click()">⬇</button>
       <button class="tool-btn" title="Exportar" onclick="exportGame()">📤</button>
+      <button class="tool-btn" title="Desfazer (Ctrl+Z)" onclick="undo()">↶</button>
+      <button class="tool-btn" title="Refazer (Ctrl+Y)" onclick="redoAction()">↷</button>
+      <button class="tool-btn" title="Mover (W)" onclick="setGizmo('translate')">✥</button>
+      <button class="tool-btn" title="Rotacionar (E)" onclick="setGizmo('rotate')">⟳</button>
+      <button class="tool-btn" title="Escalar (R)" onclick="setGizmo('scale')">⤢</button>
+      <button class="tool-btn" title="Duplicar (Ctrl+D)" onclick="duplicateSelected()">⧉</button>
     </div>
     <div class="center-play">
       <button class="play-btn" id="btnStop" title="Stop" onclick="stopPlay()">■</button>
       <button class="play-btn" id="btnPlay" title="Play" onclick="togglePlay()">▶</button>
     </div>
     <div class="right-area">
+      <span class="version" id="projectLabel" title="Projeto atual" style="color:#bbb;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Sem título</span>
       <span class="version">v0.2000 Beta • Three.js</span>
       <div class="coins"><span>💵 0</span><span>🪙 0</span></div>
       <button class="plus-btn">+</button>
@@ -124,6 +148,7 @@
   <div class="tab-bar">
     <button class="tab active" data-tab="editor" onclick="switchTab('editor')"><span class="dot"></span> 3D Editor</button>
     <button class="tab" data-tab="game" onclick="switchTab('game')"><span class="dot"></span> Game</button>
+    <button class="tab" data-tab="anim" onclick="switchTab('anim')"><span class="dot"></span> Animação</button>
     <button class="tab" data-tab="code" onclick="switchTab('code')"><span class="dot"></span> Codificação</button>
   </div>
 
@@ -143,6 +168,7 @@
         <canvas id="three-canvas"></canvas>
         <div class="view-label" id="viewLabel">3D Editor • Clique para selecionar • Arraste o gizmo</div>
         <div class="play-badge" id="playBadge">PLAYING</div>
+        <div id="uiLayer"></div>
       </div>
       <div class="code-view" id="viewCode">
         <div class="code-header">
@@ -157,11 +183,24 @@
     <div class="right-panel" id="rightPanel">
       <div class="panel-header">Inspector <span style="font-size:11px;color:#666" id="selectedName">—</span></div>
       <div class="inspector" id="inspector"><div style="padding:20px;color:#666;text-align:center;font-size:12px">Selecione um objeto</div></div>
+      <div class="inspector" id="animPanel" style="display:none;padding:8px 12px">
+        <div class="prop"><label>Alvo</label><span id="animTarget" style="color:#ccc"></span></div>
+        <div class="prop"><label>Clip</label><select id="animClipSel" onchange="animSelectClip(this.value)"></select></div>
+        <div style="display:flex;gap:4px;margin-bottom:8px"><button class="mini" onclick="animNewClip()">+ Novo</button><button class="mini" onclick="animDupClip()">Duplicar</button><button class="mini" onclick="animDelClip()">Excluir</button></div>
+        <div class="prop"><label>Duração</label><input type="number" id="animDur" step="0.1" min="0.1" onchange="animSetDur(this.value)"></div>
+        <div class="prop"><label>Loop</label><input type="checkbox" id="animLoop" onchange="animSetLoop(this.checked)"></div>
+        <div class="prop"><label>Bone</label><select id="animBoneSel" onchange="animSelectBone(this.value)"></select></div>
+        <div class="prop"><label>Tempo</label><input type="range" id="animTime" min="0" max="1" step="0.01" value="0" oninput="animScrub(this.value)" style="flex:1"><span id="animTimeLbl" style="width:38px;text-align:right">0.00</span></div>
+        <div class="prop"><label>Rot XYZ</label><div class="vec3"><input type="number" id="animRx" step="1" oninput="animLive()"><input type="number" id="animRy" step="1" oninput="animLive()"><input type="number" id="animRz" step="1" oninput="animLive()"></div></div>
+        <div style="display:flex;gap:4px;margin:8px 0"><button class="mini" onclick="animSetKey()">◆ Gravar key</button><button class="mini" id="animPlayBtn" onclick="animPreview()">▶ Preview</button></div>
+        <h4 style="font-size:10px;text-transform:uppercase;color:var(--muted);margin:10px 0 4px">Keys do bone</h4>
+        <div id="animKeys"></div>
+      </div>
     </div>
   </div>
 
   <div class="assets-panel" id="assetsPanel">
-    <div class="assets-header" onclick="toggleAssets()"><span>📦 Assets</span><span id="assetsToggle">▼</span></div>
+    <div class="assets-header" onclick="toggleAssets()"><span><button class="mini" onclick="event.stopPropagation();setAssetsTab('obj')">📦 Objetos</button> <button class="mini" onclick="event.stopPropagation();setAssetsTab('tex')">🧱 Texturas</button></span><span id="assetsToggle">▼</span></div>
     <div class="assets-body" id="assetsBody"></div>
   </div>
 
@@ -180,6 +219,25 @@
       <div class="modal-actions">
         <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
         <button class="btn-primary" onclick="closeModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="projectFileInput" accept=".json,application/json" style="display:none" onchange="importProjectFile(event)">
+  <div class="modal-overlay" id="projModal">
+    <div class="modal" style="width:480px">
+      <h3>Projetos</h3>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="text" class="proj-input" id="projNameInput" placeholder="Nome do projeto" onkeydown="if(event.key==='Enter')saveFromModal()">
+        <button class="btn-primary" style="padding:6px 14px;border-radius:4px;border:none;cursor:pointer;font-size:13px" onclick="saveFromModal()">Salvar</button>
+      </div>
+      <div class="proj-list" id="projList"></div>
+      <div class="modal-actions" style="margin-top:14px;justify-content:space-between">
+        <span style="display:flex;gap:8px">
+          <button class="btn-secondary" onclick="exportProjectFile()">⬇ Exportar .json</button>
+          <button class="btn-secondary" onclick="document.getElementById('projectFileInput').click()">⬆ Importar .json</button>
+        </span>
+        <button class="btn-secondary" onclick="closeProjModal()">Fechar</button>
       </div>
     </div>
   </div>
@@ -211,6 +269,7 @@
   let playerId = null;
   let editorCamPos = null, editorCamTarget = null;
   let currentTab = 'editor';
+  let camYaw = 0, camPitch = 0.5, camDist = 6.7, mouseDrag = false;   // camera de terceira pessoa controlada pelo mouse
 
   // ========== INIT ==========
   function initThree() {
@@ -240,7 +299,7 @@
     controls.maxPolarAngle = Math.PI * 0.49;
 
     transformControls = new THREE.TransformControls(camera, canvas);
-    transformControls.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+    transformControls.addEventListener('dragging-changed', e => { controls.enabled = !e.value; if (e.value) pushHistory(); });
     transformControls.addEventListener('objectChange', () => {
       if (selectedId && objectMap[selectedId]) {
         const m = objectMap[selectedId].mesh;
@@ -282,6 +341,27 @@
     }
 
     canvas.addEventListener('pointerdown', onPointerDown);
+
+    // Modo Game: mouse controla a camera (pointer lock; se bloqueado, arrastar com o botao pressionado)
+    canvas.addEventListener('mousedown', () => {
+      if (currentTab !== 'game') return;
+      mouseDrag = true;
+      if (canvas.requestPointerLock && document.pointerLockElement !== canvas) {
+        try { canvas.requestPointerLock(); } catch (err) {}
+      }
+    });
+    window.addEventListener('mouseup', () => { mouseDrag = false; });
+    window.addEventListener('mousemove', e => {
+      if (currentTab !== 'game') return;
+      if (document.pointerLockElement !== canvas && !mouseDrag) return;
+      camYaw -= e.movementX * 0.0035;
+      camPitch = THREE.MathUtils.clamp(camPitch + e.movementY * 0.0035, -0.15, 1.3);
+    });
+    canvas.addEventListener('wheel', e => {
+      if (currentTab !== 'game') return;
+      e.preventDefault();
+      camDist = THREE.MathUtils.clamp(camDist + e.deltaY * 0.005, 3, 14);
+    }, { passive: false });
     window.addEventListener('resize', onResize);
     animate();
 
@@ -295,8 +375,8 @@
   function rnd(v) { return Math.round(v * 100) / 100; }
 
   // ========== CREATE OBJECTS ==========
-  function createObject(name, type, mesh, components) {
-    const id = 'obj_' + (nextId++);
+  function createObject(name, type, mesh, components, forcedId) {
+    const id = forcedId || ('obj_' + (nextId++));
     const data = {
       id, name, type,
       pos: [mesh.position.x, mesh.position.y, mesh.position.z],
@@ -358,24 +438,30 @@
   }
 
   function createPlayer() {
-    // CapsuleBufferGeometry nao existe no Three r128 → cilindro + esferas
-    const mat = new THREE.MeshStandardMaterial({ color: 0x4488ff, roughness: 0.5, metalness: 0.25 });
+    // Humanoide com "ossos" (pivots nomeados) para animar: Torso, Head, ArmL/ArmR, LegL/LegR. Frente = -Z
+    const M = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.6 : r, metalness: m || 0.05 });
+    const skin = M(0xf1c9a5), shirt = M(0x3f7cff, 0.5, 0.2), pants = M(0x2b3a67), shoe = M(0x1d1d1d), dark = M(0x2a1b12);
+    const box = (w, h, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxBufferGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
+    const pivot = (name, x, y, z) => { const g = new THREE.Group(); g.name = name; g.position.set(x, y, z); return g; };
     const group = new THREE.Group();
-    const torso = new THREE.Mesh(new THREE.CylinderBufferGeometry(0.4, 0.4, 1.0, 12), mat);
-    const top = new THREE.Mesh(new THREE.SphereBufferGeometry(0.4, 12, 10), mat);
-    top.position.y = 0.7;
-    const bottom = new THREE.Mesh(new THREE.SphereBufferGeometry(0.4, 12, 10), mat);
-    bottom.position.y = -0.7;
+    const torso = pivot('Torso', 0, -0.55, 0);
+    torso.add(box(0.7, 0.8, 0.4, shirt, 0, 0.4, 0));
+    const head = pivot('Head', 0, 0.85, 0);
+    const skull = new THREE.Mesh(new THREE.SphereBufferGeometry(0.27, 16, 12), skin); skull.position.y = 0.2; head.add(skull);
+    head.add(box(0.56, 0.16, 0.5, dark, 0, 0.38, 0.02));
+    [-0.1, 0.1].forEach(x => { const e = new THREE.Mesh(new THREE.SphereBufferGeometry(0.035, 8, 6), dark); e.position.set(x, 0.24, -0.25); head.add(e); });
+    torso.add(head);
+    ['ArmL', 'ArmR'].forEach((n, i) => { const sg = i ? 1 : -1; const a = pivot(n, sg * 0.5, 0.7, 0); a.add(box(0.2, 0.7, 0.2, shirt, 0, -0.3, 0)); a.add(box(0.19, 0.2, 0.19, skin, 0, -0.72, 0)); torso.add(a); });
     group.add(torso);
-    group.add(top);
-    group.add(bottom);
+    ['LegL', 'LegR'].forEach((n, i) => { const sg = i ? 1 : -1; const l = pivot(n, sg * 0.18, -0.55, 0); l.add(box(0.26, 0.85, 0.28, pants, 0, -0.42, 0)); l.add(box(0.28, 0.14, 0.4, shoe, 0, -0.9, -0.06)); group.add(l); });
     group.position.set(0, 1.5, 5);
     group.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
     createObject('Player', 'Character', group, [
       { type: 'MeshRenderer', props: { material: 'Standard', color: '#4488ff' } },
       { type: 'Rigidbody', props: { mass: 1, useGravity: true } },
       { type: 'Collider', props: { shape: 'Capsule' } },
-      { type: 'Script', props: { className: 'PlayerController' } }
+      { type: 'Script', props: { className: 'PlayerController' } },
+      { type: 'Animator', props: { clip: 'Idle', speed: 1 } }
     ]);
   }
 
@@ -399,20 +485,28 @@
     sceneItem.className = 'hier-item' + (selectedId === null ? ' selected' : '');
     sceneItem.innerHTML = '<span class="icon">🌐</span> Scene';
     sceneItem.onclick = () => selectObject(null);
+    sceneItem.ondragover = e => e.preventDefault();
+    sceneItem.ondrop = e => { e.preventDefault(); setParent(e.dataTransfer.getData('text/plain'), null); };
     hier.appendChild(sceneItem);
 
-    Object.values(objectMap).forEach(obj => {
+    const addRow = (obj, depth) => {
       const div = document.createElement('div');
       div.className = 'hier-item child' + (selectedId === obj.data.id ? ' selected' : '');
       div.style.justifyContent = 'space-between';
-      const icons = { Terrain: '🏔️', Mesh: '📦', Character: '🧍', Camera: '📷', Light: '💡' };
+      div.style.paddingLeft = (28 + depth * 14) + 'px';
+      div.draggable = true;
+      div.ondragstart = e => e.dataTransfer.setData('text/plain', obj.data.id);
+      div.ondragover = e => e.preventDefault();
+      div.ondrop = e => { e.preventDefault(); setParent(e.dataTransfer.getData('text/plain'), obj.data.id); };
+      const icons = { Terrain: '🏔️', Mesh: '📦', Character: '🧍', Camera: '📷', Light: '💡', Empty: '⬚' };
       const left = document.createElement('span');
       left.style.display = 'flex';
       left.style.alignItems = 'center';
       left.style.gap = '6px';
       left.style.opacity = obj.data.visible === false ? '0.4' : '1';
-      left.innerHTML = `<span class="icon">${icons[obj.data.type] || '📦'}</span> ${obj.data.name}`;
+      left.innerHTML = `<span class="icon">${icons[obj.data.type] || '📦'}</span> ${esc(obj.data.name)}`;
       left.onclick = () => selectObject(obj.data.id);
+      left.ondblclick = () => renameObject(obj.data.id);
 
       const actions = document.createElement('span');
       actions.style.display = 'flex';
@@ -447,12 +541,23 @@
       div.appendChild(actions);
       div.onclick = () => selectObject(obj.data.id);
       hier.appendChild(div);
+      Object.values(objectMap).filter(c => c.data.parent === obj.data.id).forEach(c => addRow(c, depth + 1));
+    };
+    Object.values(objectMap).filter(o => !o.data.parent || !objectMap[o.data.parent]).forEach(o => addRow(o, 0));
+    Object.values(uiMap).forEach(u => {
+      const d2 = document.createElement('div');
+      d2.className = 'hier-item child' + (selectedId === u.id ? ' selected' : '');
+      d2.innerHTML = '<span class="icon">🖼</span> ' + esc(u.name);
+      d2.onclick = () => selectObject(u.id);
+      hier.appendChild(d2);
     });
     document.getElementById('statsText').textContent = `FPS: ${fps} • Objetos: ${Object.keys(objectMap).length}`;
   }
 
   function deleteObject(id) {
     if (!id || !objectMap[id]) return;
+    pushHistory();
+    Object.values(objectMap).filter(c => c.data.parent === id).forEach(c => deleteObject(c.data.id));
     const name = objectMap[id].data.name;
     // Remove da cena 3D
     const mesh = objectMap[id].mesh;
@@ -462,7 +567,7 @@
       selectedId = null;
       document.getElementById('selectedName').textContent = 'Scene';
     }
-    scene.remove(mesh);
+    if (mesh.parent) mesh.parent.remove(mesh);
     // Dispose geometry/material se for Mesh
     if (mesh.geometry) mesh.geometry.dispose();
     if (mesh.material) {
@@ -485,6 +590,7 @@
   }
 
   function deleteSelected() {
+    if (selectedId && uiMap[selectedId]) { pushHistory(); const n = uiMap[selectedId].name; delete uiMap[selectedId]; selectObject(null); renderUI(); logConsole('info', 'UI excluída: ' + n); return; }
     if (!selectedId) {
       logConsole('warn', 'Nenhum objeto selecionado para excluir');
       return;
@@ -496,6 +602,7 @@
     if (!id || !objectMap[id]) return;
     const obj = objectMap[id];
     const vis = obj.data.visible !== false;
+    pushHistory();
     obj.data.visible = !vis;
     obj.mesh.visible = !vis;
     rebuildHierarchy();
@@ -529,6 +636,7 @@
   }
 
   function selectObject(id) {
+    if (id && uiMap[id]) return selectUI(id);
     if (selectedId && objectMap[selectedId]) {
       setEmissive(objectMap[selectedId].mesh, 0x000000);
     }
@@ -545,13 +653,16 @@
     }
     rebuildHierarchy();
     renderInspector();
+    renderUI();
+    if (currentTab === 'anim') renderAnimPanel();
   }
 
   function onPointerDown(e) {
-    if (isPlaying || e.button !== 0 || transformControls.dragging) return;
+    if (isPlaying || currentTab === 'game' || e.button !== 0 || transformControls.dragging) return;
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.params.Line.threshold = 0.2;
     raycaster.setFromCamera(mouse, camera);
     const meshes = Object.values(objectMap).map(o => o.mesh);
     const hits = raycaster.intersectObjects(meshes, true);
@@ -565,12 +676,14 @@
   // ========== INSPECTOR ==========
   function renderInspector() {
     const insp = document.getElementById('inspector');
+    if (selectedId && uiMap[selectedId]) return renderUIInspector();
     if (!selectedId || !objectMap[selectedId]) {
       insp.innerHTML = '<div style="padding:20px;color:#666;text-align:center;font-size:12px">Selecione um objeto</div>';
       return;
     }
     const obj = objectMap[selectedId];
     const d = obj.data;
+    const parentOptions = '<option value="">— Scene —</option>' + Object.values(objectMap).filter(x => x.data.id !== d.id).map(x => `<option value="${x.data.id}" ${d.parent === x.data.id ? 'selected' : ''}>${esc(x.data.name)}</option>`).join('');
     let html = `<div class="insp-section"><h4>Transform</h4>
       <div class="prop"><label>Position</label><div class="vec3">
         <input type="number" step="0.1" value="${d.pos[0]}" onchange="updateTransform('pos',0,this.value)">
@@ -586,32 +699,36 @@
         <input type="number" step="0.1" value="${d.scale[0]}" onchange="updateTransform('scale',0,this.value)">
         <input type="number" step="0.1" value="${d.scale[1]}" onchange="updateTransform('scale',1,this.value)">
         <input type="number" step="0.1" value="${d.scale[2]}" onchange="updateTransform('scale',2,this.value)">
-      </div></div></div>`;
+      </div></div>
+      <div class="prop"><label>Parent</label><select onchange="setParent(selectedId,this.value)">${parentOptions}</select></div></div>`;
 
     obj.components.forEach((comp, idx) => {
       html += `<div class="insp-section"><div class="comp-header">
-        <span>${compIcon(comp.type)} ${comp.type}</span>
+        <span>${compIcon(comp.type)} ${esc(comp.type)}</span>
         <span class="remove-comp" onclick="removeComponent(${idx})">✕</span></div>`;
       if (comp.props) Object.entries(comp.props).forEach(([k, v]) => {
-        // texture tem botao proprio, nao mostra input de texto
-        if (k === 'texture') return;
+        if (!/^\w+$/.test(k) || k === 'texture' || k === 'tileX' || k === 'tileY') return;
         if (comp.type === 'MeshRenderer' && k === 'color') {
           html += `<div class="prop"><label>color</label>
             <input type="color" value="${v || '#888888'}" style="flex:1;height:26px;border:1px solid #333;border-radius:3px;background:#222;cursor:pointer"
               onchange="updateCompProp(${idx},'color',this.value); applyColorToMesh(this.value)"></div>`;
           return;
         }
-        html += `<div class="prop"><label>${k}</label><input type="text" value="${v}" onchange="updateCompProp(${idx},'${k}',this.value)"></div>`;
+        html += `<div class="prop"><label>${esc(k)}</label><input type="text" value="${esc(v)}" onchange="updateCompProp(${idx},'${k}',this.value)"></div>`;
       });
       if (comp.type === 'MeshRenderer') {
         const texName = (comp.props && comp.props.texture) ? comp.props.texture : '';
         html += `<div class="prop"><label>texture</label>
           <div style="flex:1;display:flex;gap:4px">
             <button onclick="requestTexture('${selectedId}')" style="flex:1;background:#222;border:1px solid #444;color:#00b4ff;padding:4px 6px;border-radius:3px;cursor:pointer;font-size:11px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-              🖼 ${texName ? texName : 'Importar imagem...'}
+              🖼 ${texName ? esc(texName) : 'Importar imagem...'}
             </button>
             ${texName ? `<button onclick="clearTexture('${selectedId}')" title="Remover textura" style="background:#333;border:1px solid #555;color:#ff6b6b;padding:4px 8px;border-radius:3px;cursor:pointer;font-size:11px">✕</button>` : ''}
           </div></div>`;
+      }
+      if (comp.type === 'MeshRenderer') {
+        const pr = comp.props || {};
+        html += `<div class="prop"><label>tiling</label><div class="vec3"><input type="number" step="0.5" min="0.1" value="${esc(pr.tileX || 1)}" onchange="updateCompProp(${idx},'tileX',this.value)"><input type="number" step="0.5" min="0.1" value="${esc(pr.tileY || 1)}" onchange="updateCompProp(${idx},'tileY',this.value)"></div></div>`;
       }
       html += `</div>`;
     });
@@ -624,17 +741,19 @@
         <div onclick="addComponent('Script')">Script</div>
         <div onclick="addComponent('Light')">Light</div>
         <div onclick="addComponent('AudioSource')">AudioSource</div>
+        <div onclick="addComponent('Animator')">Animator</div>
       </div>`;
     insp.innerHTML = html;
   }
 
   function compIcon(t) {
-    return { MeshRenderer: '🎨', Rigidbody: '⚙️', Collider: '📐', Script: '📜', Light: '💡', AudioSource: '🔊', Camera: '📷' }[t] || '🧩';
+    return { MeshRenderer: '🎨', Rigidbody: '⚙️', Collider: '📐', Script: '📜', Light: '💡', AudioSource: '🔊', Camera: '📷', Animator: '🎬' }[t] || '🧩';
   }
 
   function updateTransform(prop, idx, val) {
     if (!selectedId || !objectMap[selectedId]) return;
     const obj = objectMap[selectedId];
+    pushHistory();
     obj.data[prop][idx] = parseFloat(val) || 0;
     const m = obj.mesh;
     if (prop === 'pos') m.position.set(...obj.data.pos);
@@ -648,11 +767,15 @@
 
   function updateCompProp(compIdx, key, val) {
     if (!selectedId || !objectMap[selectedId]) return;
+    pushHistory();
     objectMap[selectedId].components[compIdx].props[key] = val;
+    if (key === 'tileX' || key === 'tileY') applyTiling(selectedId);
   }
 
   function applyColorToMesh(hex) {
     if (!selectedId || !objectMap[selectedId]) return;
+    pushHistory();
+    objectMap[selectedId].data.colorOverride = hex;
     const mesh = objectMap[selectedId].mesh;
     const apply = (m) => {
       if (!m.isMesh || !m.material) return;
@@ -677,12 +800,14 @@
     else if (mesh.traverse) mesh.traverse(apply);
     const mr = objectMap[objId].components.find(c => c.type === 'MeshRenderer');
     if (mr) mr.props.texture = '';
+    delete assetBlobs[objId + '|tex'];
     renderInspector();
     logConsole('info', 'Textura removida');
   }
 
   function removeComponent(idx) {
     if (!selectedId || !objectMap[selectedId]) return;
+    pushHistory();
     objectMap[selectedId].components.splice(idx, 1);
     renderInspector();
     logConsole('info', 'Componente removido');
@@ -696,8 +821,10 @@
       Collider: { shape: 'Box' },
       Script: { className: 'NewScript' },
       Light: { intensity: 1, color: '#ffffff' },
-      AudioSource: { clip: 'none', volume: 1 }
+      AudioSource: { clip: 'none', volume: 1 },
+      Animator: { clip: 'Idle', speed: 1 }
     };
+    pushHistory();
     objectMap[selectedId].components.push({ type, props: defaults[type] || {} });
     document.getElementById('compMenu')?.classList.remove('show');
     renderInspector();
@@ -714,7 +841,7 @@
 
   // ========== ADD / ASSETS ==========
   function showAddMenu() {
-    const c = prompt('Criar:\n1=Cube  2=Sphere  3=Plane  4=Capsule  5=Cylinder\n\nNúmero:');
+    const c = prompt('Criar:\n1=Cube  2=Sphere  3=Plane  4=Capsule  5=Cylinder\n6=Empty  7=UI Texto  8=UI Botão  9=UI Painel\n\nNúmero:');
     if (c) spawnPrimitive(c);
   }
 
@@ -724,13 +851,17 @@
       '2': () => new THREE.Mesh(new THREE.SphereBufferGeometry(0.5, 16, 12), new THREE.MeshStandardMaterial({ color: 0x88aa88 })),
       '3': () => { const m = new THREE.Mesh(new THREE.PlaneBufferGeometry(4,4), new THREE.MeshStandardMaterial({ color: 0x666666 })); m.rotation.x = -Math.PI/2; return m; },
       '4': () => new THREE.Mesh(new THREE.CylinderBufferGeometry(0.35, 0.35, 1.4, 12), new THREE.MeshStandardMaterial({ color: 0xaa8888 })),
-      '5': () => new THREE.Mesh(new THREE.CylinderBufferGeometry(0.5, 0.5, 1.5, 16), new THREE.MeshStandardMaterial({ color: 0x8888aa }))
+      '5': () => new THREE.Mesh(new THREE.CylinderBufferGeometry(0.5, 0.5, 1.5, 16), new THREE.MeshStandardMaterial({ color: 0x8888aa })),
+      '6': () => { const g = new THREE.Group(); g.add(new THREE.AxesHelper(0.6)); return g; }
     };
-    const names = { '1': 'Cube', '2': 'Sphere', '3': 'Plane', '4': 'Capsule', '5': 'Cylinder' };
+    const uiKinds = { '7': 'Text', '8': 'Button', '9': 'Panel' };
+    if (uiKinds[type]) return createUI(uiKinds[type]);
+    const names = { '1': 'Cube', '2': 'Sphere', '3': 'Plane', '4': 'Capsule', '5': 'Cylinder', '6': 'Empty' };
     if (!makers[type]) return;
+    pushHistory();
     const mesh = makers[type]();
     mesh.position.set((Math.random()-0.5)*4, 1, (Math.random()-0.5)*4);
-    const id = createObject(nameOverride || names[type], 'Mesh', mesh, [
+    const id = createObject(nameOverride || names[type], type === '6' ? 'Empty' : 'Mesh', mesh, type === '6' ? [] : [
       { type: 'MeshRenderer', props: { material: 'Standard' } },
       { type: 'Collider', props: { shape: 'Box' } }
     ]);
@@ -741,12 +872,17 @@
 
   function buildAssetsPanel() {
     const body = document.getElementById('assetsBody');
+    if (assetsTab === 'tex') return buildTexturePanel();
     const items = [
       { name: 'Cube', icon: '⬜', type: '1' },
       { name: 'Sphere', icon: '⚪', type: '2' },
       { name: 'Plane', icon: '▭', type: '3' },
       { name: 'Capsule', icon: '💊', type: '4' },
       { name: 'Cylinder', icon: '🛢️', type: '5' },
+      { name: 'Empty', icon: '⬚', type: '6' },
+      { name: 'UI Texto', icon: '🅰', type: '7' },
+      { name: 'UI Botão', icon: '🔘', type: '8' },
+      { name: 'UI Painel', icon: '▣', type: '9' },
       { name: 'Terrain', icon: '🏔️', type: 'terrain' }
     ];
     body.innerHTML = '';
@@ -774,14 +910,24 @@
     onResize();
   }
 
+  function loadModelBlob(blob, ext) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      const done = m => { URL.revokeObjectURL(url); resolve(m); };
+      const fail = e => { URL.revokeObjectURL(url); reject(e instanceof Error ? e : new Error(String(e && e.message || e))); };
+      if (ext === 'gltf' || ext === 'glb') new THREE.GLTFLoader().load(url, g => done(g.scene), undefined, fail);
+      else if (ext === 'obj') new THREE.OBJLoader().load(url, done, undefined, fail);
+      else if (ext === 'fbx') new THREE.FBXLoader().load(url, done, undefined, fail);
+      else fail(new Error('Formato nao suportado: ' + ext));
+    });
+  }
+
   function importModel(event) {
     const file = event.target.files[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
     const name = file.name.replace(/\.(gltf|glb|obj|fbx)$/i, '');
     const ext = file.name.split('.').pop().toLowerCase();
-
-    function onLoaded(model) {
+    loadModelBlob(file, ext).then(model => {
       model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
       const box = new THREE.Box3().setFromObject(model);
       const size = new THREE.Vector3();
@@ -793,27 +939,12 @@
         { type: 'MeshRenderer', props: { material: 'Imported', texture: '' } },
         { type: 'Collider', props: { shape: 'Mesh' } }
       ]);
+      objectMap[id].data.model = { ext, file: file.name };
+      assetBlobs[id + '|model'] = file;   // guardado junto com o projeto
       selectObject(id);
       rebuildHierarchy();
       logConsole('info', ext.toUpperCase() + ' importado: ' + file.name);
-      URL.revokeObjectURL(url);
-    }
-
-    function onError(err) {
-      logConsole('error', 'Erro ao importar ' + ext.toUpperCase() + ': ' + (err.message || err));
-      URL.revokeObjectURL(url);
-    }
-
-    if (ext === 'gltf' || ext === 'glb') {
-      new THREE.GLTFLoader().load(url, g => onLoaded(g.scene), undefined, onError);
-    } else if (ext === 'obj') {
-      new THREE.OBJLoader().load(url, onLoaded, undefined, onError);
-    } else if (ext === 'fbx') {
-      new THREE.FBXLoader().load(url, onLoaded, undefined, onError);
-    } else {
-      logConsole('error', 'Formato nao suportado: ' + ext);
-      URL.revokeObjectURL(url);
-    }
+    }).catch(err => logConsole('error', 'Erro ao importar ' + ext.toUpperCase() + ': ' + (err.message || err)));
     event.target.value = '';
   }
 
@@ -823,39 +954,54 @@
     pendingTextureObjId = objId;
     document.getElementById('textureInput').click();
   }
+  function loadTextureOnObject(objId, blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob);
+      new THREE.TextureLoader().load(url, tex => {
+        URL.revokeObjectURL(url);
+        tex.encoding = THREE.sRGBEncoding;
+        const o = objectMap[objId];
+        if (!o) return resolve();
+        const mdl = o.data.model;
+        if (mdl && (mdl.ext === 'glb' || mdl.ext === 'gltf')) tex.flipY = false;   // convencao de UV do glTF
+        tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        o.mesh.traverse(m => {
+          if (!m.isMesh) return;
+          const list = Array.isArray(m.material) ? m.material : [m.material || new THREE.MeshStandardMaterial()];
+          const out = list.map(x => { const c = x.clone(); c.map = tex; if (c.color) c.color.set(0xffffff); c.needsUpdate = true; return c; });
+          m.material = Array.isArray(m.material) ? out : out[0];
+        });
+        resolve();
+      }, undefined, () => { URL.revokeObjectURL(url); reject(new Error('imagem de textura invalida')); });
+    });
+  }
+
   function applyTexture(event) {
     const file = event.target.files[0];
-    if (!file || !pendingTextureObjId || !objectMap[pendingTextureObjId]) return;
-    const url = URL.createObjectURL(file);
-    const loader = new THREE.TextureLoader();
-    loader.load(url, tex => {
-      tex.encoding = THREE.sRGBEncoding;
-      const mesh = objectMap[pendingTextureObjId].mesh;
-      const apply = (m) => {
-        if (!m.isMesh) return;
-        if (!m.material) m.material = new THREE.MeshStandardMaterial();
-        // clone material so we don't share
-        m.material = m.material.clone();
-        m.material.map = tex;
-        m.material.needsUpdate = true;
-      };
-      if (mesh.isMesh) apply(mesh);
-      else mesh.traverse(apply);
-      // update component prop
-      const comps = objectMap[pendingTextureObjId].components;
-      const mr = comps.find(c => c.type === 'MeshRenderer');
-      if (mr) mr.props.texture = file.name;
-      renderInspector();
-      logConsole('info', 'Textura aplicada: ' + file.name);
-      URL.revokeObjectURL(url);
-    }, undefined, err => logConsole('error', 'Erro textura: ' + err.message));
-    event.target.value = '';
+    const objId = pendingTextureObjId;   // capturado antes de zerar (o callback e assincrono)
     pendingTextureObjId = null;
+    if (!file || !objId || !objectMap[objId]) { event.target.value = ''; return; }
+    pushHistory();
+    loadTextureOnObject(objId, file).then(() => {
+      assetBlobs[objId + '|tex'] = file;
+      applyTiling(objId);
+      const o = objectMap[objId];
+      const mr = o && o.components.find(c => c.type === 'MeshRenderer');
+      if (mr) mr.props.texture = file.name;
+      if (selectedId === objId) renderInspector();
+      logConsole('info', 'Textura aplicada: ' + file.name);
+    }).catch(err => logConsole('error', 'Erro textura: ' + (err.message || err)));
+    event.target.value = '';
   }
 
   // ========== TABS / PLAY ==========
   function switchTab(tab) {
+    if (currentTab === 'anim' && tab !== 'anim') { animPreviewOn = false; resetAllPoses(); }
     currentTab = tab;
+    if (tab !== 'game' && document.pointerLockElement) document.exitPointerLock();
+    document.getElementById('inspector').style.display = tab === 'anim' ? 'none' : '';
+    document.getElementById('animPanel').style.display = tab === 'anim' ? 'block' : 'none';
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelector('.tab[data-tab="'+tab+'"]').classList.add('active');
     const codeView = document.getElementById('viewCode');
@@ -883,7 +1029,7 @@
         controls.enabled = false;
         // Visao da camera do jogador
         enterPlayerView();
-        setStatus('Modo Game • Visão do Player • WASD mover • Espaço pular');
+        setStatus('Modo Game • Clique para capturar o mouse (Esc libera) • WASD mover • Roda zoom • Espaço pular');
       } else {
         left.style.display = 'flex';
         right.style.display = 'flex';
@@ -896,6 +1042,7 @@
         setStatus('Modo 3D Editor');
       }
       onResize();
+      if (tab === 'anim') renderAnimPanel();
     }
   }
 
@@ -908,6 +1055,7 @@
     // Esconde o mesh do player na visao (primeira pessoa-ish / terceira proxima)
     if (playerId && objectMap[playerId]) {
       // terceira pessoa: camera atras do player
+      camYaw = objectMap[playerId].mesh.rotation.y; camPitch = 0.5; camDist = 6.7;
       updatePlayCamera(0);
     }
   }
@@ -929,15 +1077,17 @@
   function updatePlayCamera(dt) {
     if (!playerId || !objectMap[playerId]) return;
     const player = objectMap[playerId].mesh;
-    // Terceira pessoa: atras e acima do player
-    const offset = new THREE.Vector3(0, 3.5, 6);
-    // Rotaciona offset pela rotacao Y do player
-    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
-    const desired = player.position.clone().add(offset);
-    camera.position.lerp(desired, Math.min(1, 8 * (dt || 0.016)));
-    const lookAt = player.position.clone();
-    lookAt.y += 1.2;
-    camera.lookAt(lookAt);
+    // Terceira pessoa: a camera orbita o player conforme o mouse (yaw/pitch) e a roda (distancia)
+    const target = player.position.clone();
+    target.y += 1.2;
+    const desired = new THREE.Vector3(
+      Math.sin(camYaw) * Math.cos(camPitch),
+      Math.sin(camPitch),
+      Math.cos(camYaw) * Math.cos(camPitch)
+    ).multiplyScalar(camDist).add(target);
+    desired.y = Math.max(desired.y, 0.4);   // nao entra no chao
+    camera.position.lerp(desired, dt ? Math.min(1, 25 * dt) : 1);
+    camera.lookAt(target);
   }
 
   function updateGameplay(dt) {
@@ -946,18 +1096,23 @@
     const speed = 6;
     const rotSpeed = 2.5;
 
-    // Rotacao com A/D ou setas
-    if (keys['KeyA'] || keys['ArrowLeft']) player.rotation.y += rotSpeed * dt;
-    if (keys['KeyD'] || keys['ArrowRight']) player.rotation.y -= rotSpeed * dt;
-
-    // Movimento W/S no eixo local do player
-    const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+    // Movimento relativo a camera (o mouse controla camYaw): W/S frente-tras, A/D lateral
+    const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
+    const forward = new THREE.Vector3(-sy, 0, -cy);
+    const right = new THREE.Vector3(cy, 0, -sy);
     const move = new THREE.Vector3();
     if (keys['KeyW'] || keys['ArrowUp']) move.add(forward);
     if (keys['KeyS'] || keys['ArrowDown']) move.sub(forward);
+    if (keys['KeyD'] || keys['ArrowRight']) move.add(right);
+    if (keys['KeyA'] || keys['ArrowLeft']) move.sub(right);
     if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(speed * dt);
-      player.position.add(move);
+      move.normalize();
+      // vira o player suavemente para a direcao do movimento
+      const targetRot = Math.atan2(-move.x, -move.z);
+      let diff = targetRot - player.rotation.y;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      player.rotation.y += diff * Math.min(1, rotSpeed * 4 * dt);
+      player.position.add(move.multiplyScalar(speed * dt));
     }
 
     // Gravidade simples + pulo
@@ -975,27 +1130,61 @@
       playerVelocityY = 0;
     }
 
+    tickAnimators(dt, player.position.y > 1.55 ? 'Jump' : (move.lengthSq() > 0 ? 'Walk' : 'Idle'));
+
     // Atualiza data
     objectMap[playerId].data.pos = [rnd(player.position.x), rnd(player.position.y), rnd(player.position.z)];
     objectMap[playerId].data.rot[1] = rnd(THREE.MathUtils.radToDeg(player.rotation.y));
   }
 
+  // Snapshot da cena: o Play pode mover objetos, o Stop devolve tudo ao estado do editor
+  let playSnapshot = null;
+  function takePlaySnapshot() {
+    playSnapshot = {};
+    Object.entries(objectMap).forEach(([id, o]) => {
+      playSnapshot[id] = {
+        pos: o.mesh.position.toArray(), quat: o.mesh.quaternion.toArray(), scale: o.mesh.scale.toArray(),
+        visible: o.mesh.visible,
+        dPos: o.data.pos.slice(), dRot: o.data.rot.slice(), dScale: o.data.scale.slice()
+      };
+    });
+  }
+  function restorePlaySnapshot() {
+    if (!playSnapshot) return;
+    Object.entries(playSnapshot).forEach(([id, sn]) => {
+      const o = objectMap[id];
+      if (!o) return;
+      o.mesh.position.fromArray(sn.pos);
+      o.mesh.quaternion.fromArray(sn.quat);
+      o.mesh.scale.fromArray(sn.scale);
+      o.mesh.visible = sn.visible; o.data.visible = sn.visible;
+      o.data.pos = sn.dPos; o.data.rot = sn.dRot; o.data.scale = sn.dScale;
+    });
+    animState = {}; resetAllPoses();
+    playSnapshot = null;
+    playerVelocityY = 0;
+    renderInspector();
+  }
+
   function togglePlay() {
     if (isPlaying) { stopPlay(); return; }
+    takePlaySnapshot();
     isPlaying = true;
     playerVelocityY = 0;
     document.getElementById('btnPlay').classList.add('playing');
     document.getElementById('btnPlay').textContent = '❚❚';
     switchTab('game');
-    logConsole('info', '▶ Play iniciado — WASD mover, Espaço pular, A/D girar');
+    logConsole('info', '▶ Play iniciado — WASD mover, mouse gira a câmera (clique para capturar, Esc libera), roda = zoom, Espaço pula');
   }
 
   function stopPlay() {
+    const wasPlaying = isPlaying;
     isPlaying = false;
     document.getElementById('btnPlay').classList.remove('playing');
     document.getElementById('btnPlay').textContent = '▶';
+    restorePlaySnapshot();
     switchTab('editor');
-    logConsole('info', '■ Play parado');
+    if (wasPlaying) logConsole('info', '■ Play parado • cena restaurada');
   }
 
   const scripts = {
@@ -1051,11 +1240,757 @@
 }`
   };
 
+  let currentScript = 'PlayerController';
   function switchScript(name, el) {
+    const ed = document.getElementById('codeEditor');
+    scripts[currentScript] = ed.value;
+    currentScript = name;
     document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
     if (el) el.classList.add('active');
-    document.getElementById('codeEditor').value = scripts[name] || '';
+    ed.value = scripts[name] || '';
   }
+  document.getElementById('codeEditor').addEventListener('input', e => { scripts[currentScript] = e.target.value; });
+
+  // ========== TEXTURAS PADRAO (geradas por codigo, sem arquivos) ==========
+  let assetsTab = 'obj';
+  const _texCache = {};
+  const TEXLIB = {
+    'Cimento': { tile: 4, draw(c, r) {
+      c.fillStyle = '#9c9c97'; c.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 2500; i++) { const g = 110 + r() * 90 | 0; c.fillStyle = `rgb(${g},${g},${g - 4})`; c.fillRect(r() * 256, r() * 256, 1 + r() * 2, 1 + r() * 2); }
+      c.strokeStyle = 'rgba(60,60,60,.35)';
+      for (let i = 0; i < 3; i++) { c.beginPath(); let x = r() * 256, y = r() * 256; c.moveTo(x, y); for (let k = 0; k < 6; k++) { x += (r() - .5) * 40; y += (r() - .3) * 40; c.lineTo(x, y); } c.stroke(); } } },
+    'Tijolos': { tile: 3, draw(c, r) {
+      c.fillStyle = '#b9b2a7'; c.fillRect(0, 0, 256, 256);
+      for (let row = 0; row < 8; row++) for (let col = -1; col < 4; col++) { const R = 150 + r() * 50 | 0; c.fillStyle = `rgb(${R},${R * .42 | 0},${R * .3 | 0})`; c.fillRect(col * 64 + (row % 2 ? 32 : 0) + 2, row * 32 + 2, 60, 28); } } },
+    'Calçada': { tile: 3, draw(c, r) {
+      c.fillStyle = '#6f6f6a'; c.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const g = 150 + r() * 60 | 0; c.fillStyle = `rgb(${g},${g - 6},${g - 14})`; c.fillRect(i * 64 + 3, j * 64 + 3, 58, 58); } } },
+    'Grama': { tile: 8, draw(c, r) {
+      c.fillStyle = '#3d7a2a'; c.fillRect(0, 0, 256, 256); c.lineWidth = 1.5;
+      for (let i = 0; i < 6000; i++) { c.strokeStyle = `rgb(${30 + r() * 40 | 0},${100 + r() * 90 | 0},${25 + r() * 30 | 0})`; const x = r() * 256, y = r() * 256; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (r() - .5) * 4, y - 3 - r() * 6); c.stroke(); } } },
+    'Piso': { tile: 4, draw(c, r) {
+      c.fillStyle = '#d8d4cc'; c.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const g = 200 + r() * 30 | 0; c.fillStyle = `rgb(${g},${g - 12},${g - 30})`; c.fillRect(i * 64 + 2, j * 64 + 2, 60, 60); } } },
+    'Telhado': { tile: 3, draw(c, r) {
+      c.fillStyle = '#6b2f1a'; c.fillRect(0, 0, 256, 256);
+      for (let row = 0; row < 8; row++) for (let col = -1; col < 9; col++) { const R = 160 + r() * 50 | 0, x = col * 32 + (row % 2 ? 16 : 0), y = row * 32; c.fillStyle = `rgb(${R},${R * .4 | 0},${R * .22 | 0})`; c.fillRect(x + 1, y, 30, 32); c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 1, y + 27, 30, 5); } } },
+    'Porta': { tile: 1, draw(c, r) {
+      c.fillStyle = '#6a4124'; c.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 70; i++) { c.fillStyle = `rgba(40,20,5,${.1 + r() * .2})`; c.fillRect(r() * 256, 0, 1 + r() * 2, 256); }
+      c.fillStyle = '#5a3419'; c.fillRect(36, 26, 184, 92); c.fillRect(36, 138, 184, 92);
+      c.strokeStyle = '#8a5a35'; c.lineWidth = 3; c.strokeRect(36, 26, 184, 92); c.strokeRect(36, 138, 184, 92);
+      c.fillStyle = '#d4af37'; c.beginPath(); c.arc(222, 128, 9, 0, 7); c.fill(); } },
+    'Janela': { tile: 1, draw(c, r) {
+      c.fillStyle = '#f2f2f2'; c.fillRect(0, 0, 256, 256);
+      const g = c.createLinearGradient(0, 0, 256, 256); g.addColorStop(0, '#bfe3ff'); g.addColorStop(1, '#6fa8dc');
+      c.fillStyle = g; c.fillRect(18, 18, 220, 220);
+      c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.moveTo(18, 140); c.lineTo(140, 18); c.lineTo(190, 18); c.lineTo(18, 190); c.fill();
+      c.fillStyle = '#f2f2f2'; c.fillRect(124, 18, 8, 220); c.fillRect(18, 124, 220, 8); } }
+  };
+  function texCanvas(key) {
+    if (_texCache[key]) return _texCache[key];
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+    let seed = 12345; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    TEXLIB[key].draw(cv.getContext('2d'), r);
+    return (_texCache[key] = cv);
+  }
+  function setAssetsTab(t) { assetsTab = t; buildAssetsPanel(); }
+  function buildTexturePanel() {
+    const body = document.getElementById('assetsBody'); body.innerHTML = '';
+    Object.keys(TEXLIB).forEach(k => {
+      const card = document.createElement('div'); card.className = 'asset-card'; card.title = 'Aplicar no objeto selecionado';
+      const img = document.createElement('img'); img.src = texCanvas(k).toDataURL(); img.style.cssText = 'width:48px;height:48px;border-radius:4px;margin-bottom:6px';
+      const nm = document.createElement('div'); nm.className = 'name'; nm.textContent = k;
+      card.append(img, nm); card.onclick = () => applyPreset(selectedId, k);
+      body.appendChild(card);
+    });
+  }
+  function applyTexObject(objId, tex) {
+    const o = objectMap[objId]; if (!o) return;
+    tex.encoding = THREE.sRGBEncoding; tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    o.mesh.traverse(m => {
+      if (!m.isMesh) return;
+      const list = Array.isArray(m.material) ? m.material : [m.material || new THREE.MeshStandardMaterial()];
+      const out = list.map(x => { const c = x.clone(); c.map = tex; if (c.color) c.color.set(0xffffff); c.needsUpdate = true; return c; });
+      m.material = Array.isArray(m.material) ? out : out[0];
+    });
+  }
+  function applyTiling(objId) {
+    const o = objectMap[objId]; if (!o) return;
+    const mr = o.components.find(c => c.type === 'MeshRenderer');
+    const tx = parseFloat(mr && mr.props.tileX) || 1, ty = parseFloat(mr && mr.props.tileY) || 1;
+    o.mesh.traverse(m => { if (m.isMesh) (Array.isArray(m.material) ? m.material : [m.material]).forEach(x => { if (x && x.map) x.map.repeat.set(tx, ty); }); });
+  }
+  function applyPreset(objId, key, keep) {
+    const o = objectMap[objId], L = TEXLIB[key];
+    if (!o || !L) { logConsole('warn', 'Selecione um objeto 3D para aplicar a textura'); return; }
+    if (!keep) pushHistory();
+    let mr = o.components.find(c => c.type === 'MeshRenderer');
+    if (!mr) { mr = { type: 'MeshRenderer', props: { material: 'Standard', texture: '' } }; o.components.push(mr); }
+    applyTexObject(objId, new THREE.CanvasTexture(texCanvas(key)));
+    mr.props.texture = 'preset:' + key;
+    delete assetBlobs[objId + '|tex'];
+    if (!keep) { mr.props.tileX = L.tile; mr.props.tileY = L.tile; }
+    applyTiling(objId);
+    if (!keep) { renderInspector(); logConsole('info', 'Textura aplicada: ' + key + ' (ajuste o tiling no Inspector)'); }
+  }
+
+  // ========== UNDO / REDO / DUPLICAR / RENOMEAR / GIZMO ==========
+  const hist = [], redoStack = [];
+  let lastPush = 0, histBusy = false;
+  function pushHistory() {
+    if (histBusy || isPlaying || !renderer) return;
+    const n = performance.now();
+    if (n - lastPush < 300) return;   // agrupa mudancas rapidas
+    lastPush = n;
+    try { hist.push(JSON.stringify(serializeScene())); if (hist.length > 40) hist.shift(); redoStack.length = 0; } catch (e) {}
+  }
+  async function stepHistory(from, to) {
+    if (!from.length || histBusy || isPlaying) return;
+    histBusy = true;
+    try {
+      to.push(JSON.stringify(serializeScene()));
+      const snap = JSON.parse(from.pop());
+      delete snap.camera; delete snap.scripts;   // desfazer nao mexe na camera nem nos scripts
+      await applyProject(snap, Object.assign({}, assetBlobs), projectName);
+    } finally { histBusy = false; lastPush = performance.now(); }
+  }
+  const undo = () => stepHistory(hist, redoStack);
+  const redoAction = () => stepHistory(redoStack, hist);
+  function setGizmo(mode) { transformControls.setMode(mode); setStatus('Gizmo: ' + mode); }
+
+  function renameObject(id) {
+    const o = objectMap[id]; if (!o) return;
+    const n = prompt('Novo nome:', o.data.name);
+    if (!n || !n.trim()) return;
+    pushHistory(); o.data.name = n.trim();
+    if (selectedId === id) document.getElementById('selectedName').textContent = o.data.name;
+    rebuildHierarchy();
+  }
+  function duplicateSelected() {
+    const u0 = uiMap[selectedId];
+    if (u0) { pushHistory(); const u = JSON.parse(JSON.stringify(u0)); u.id = 'ui_' + (nextUiId++); u.name += '_copy'; u.x = Math.min(100, u.x + 4); u.y = Math.min(100, u.y + 4); uiMap[u.id] = u; selectObject(u.id); return; }
+    const o = objectMap[selectedId]; if (!o) { logConsole('warn', 'Selecione um objeto para duplicar'); return; }
+    pushHistory();
+    const d = o.data, m = o.mesh.clone(true), dead = [];
+    m.traverse(n => { if (n !== m && n.userData.id && objectMap[n.userData.id]) dead.push(n); });   // filhos registrados nao sao duplicados
+    dead.forEach(n => n.parent.remove(n));
+    const cm = x => { const c = x.clone(); if (c.emissive) c.emissive.setHex(0); if (c.map) { c.map = c.map.clone(); c.map.needsUpdate = true; } return c; };
+    m.traverse(n => { if (n.isMesh && n.material) n.material = Array.isArray(n.material) ? n.material.map(cm) : cm(n.material); });
+    m.position.x += 1;
+    const id = createObject(d.name + ' (1)', d.type, m, JSON.parse(JSON.stringify(o.components)));
+    const nd = objectMap[id].data;
+    if (d.model) nd.model = Object.assign({}, d.model);
+    if (d.colorOverride) nd.colorOverride = d.colorOverride;
+    ['model', 'tex'].forEach(k => { if (assetBlobs[d.id + '|' + k]) assetBlobs[id + '|' + k] = assetBlobs[d.id + '|' + k]; });
+    if (d.parent && objectMap[d.parent]) { objectMap[d.parent].mesh.add(m); nd.parent = d.parent; }
+    selectObject(id);
+    logConsole('info', 'Duplicado: ' + d.name);
+  }
+  window.addEventListener('keydown', e => {
+    const t = e.target.tagName;
+    if (t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || currentTab === 'game' || currentTab === 'code') return;
+    const k = e.key.toLowerCase(), c = e.ctrlKey || e.metaKey;
+    if (c && k === 'z') { e.preventDefault(); e.shiftKey ? redoAction() : undo(); }
+    else if (c && k === 'y') { e.preventDefault(); redoAction(); }
+    else if (c && k === 'd') { e.preventDefault(); duplicateSelected(); }
+    else if (k === 'f2') renameObject(selectedId);
+    else if (!c && ['w', 'e', 'r'].includes(k)) setGizmo({ w: 'translate', e: 'rotate', r: 'scale' }[k]);
+  });
+
+  // ========== PARENT / UI / ANIMACAO ==========
+  const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const uiMap = {};
+  let nextUiId = 1, animState = {};
+
+  function setParent(id, pid) {
+    const o = objectMap[id];
+    if (!o) return;
+    pid = pid || null;
+    if (pid) {
+      if (!objectMap[pid] || pid === id) return;
+      for (let a = objectMap[pid].data.parent; a; a = objectMap[a] && objectMap[a].data.parent) {
+        if (a === id) { logConsole('warn', 'Parent inválido: criaria um ciclo'); return; }
+      }
+    }
+    pushHistory();
+    (pid ? objectMap[pid].mesh : scene).attach(o.mesh);   // attach mantem a posição no mundo
+    o.data.parent = pid;
+    const m = o.mesh, D = THREE.MathUtils.radToDeg;
+    o.data.pos = [rnd(m.position.x), rnd(m.position.y), rnd(m.position.z)];
+    o.data.rot = [rnd(D(m.rotation.x)), rnd(D(m.rotation.y)), rnd(D(m.rotation.z))];
+    o.data.scale = [rnd(m.scale.x), rnd(m.scale.y), rnd(m.scale.z)];
+    rebuildHierarchy(); renderInspector();
+    logConsole('info', o.data.name + (pid ? ' agora é filho de ' + objectMap[pid].data.name : ' voltou para a Scene'));
+  }
+
+  // ---- UI (overlay HTML sobre o viewport) ----
+  function createUI(kind) {
+    pushHistory();
+    const id = 'ui_' + (nextUiId++);
+    uiMap[id] = {
+      id, kind, name: kind + '_' + id.slice(3), x: 50, y: 50,
+      w: kind === 'Panel' ? 220 : 140, h: kind === 'Panel' ? 120 : 40,
+      text: kind === 'Text' ? 'Texto' : kind === 'Button' ? 'Botão' : '',
+      color: '#ffffff', bg: kind === 'Button' ? '#00b4ff' : kind === 'Panel' ? 'rgba(0,0,0,0.5)' : 'transparent',
+      size: 18, action: 'none', target: '', visible: true
+    };
+    selectObject(id);
+    logConsole('info', 'UI ' + kind + ' criada (arraste no viewport para mover)');
+  }
+  function renderUI() {
+    const L = document.getElementById('uiLayer');
+    if (!L) return;
+    L.textContent = '';
+    Object.values(uiMap).forEach(u => {
+      if (!u.visible) return;
+      const el = document.createElement('div');
+      el.className = 'ui-el' + (u.id === selectedId ? ' sel' : '');
+      el.textContent = u.text;
+      Object.assign(el.style, { left: u.x + '%', top: u.y + '%', width: u.w + 'px', height: u.h + 'px', color: u.color, background: u.bg, fontSize: u.size + 'px', cursor: u.kind === 'Button' ? 'pointer' : 'default' });
+      el.onmousedown = e => uiDown(e, u);
+      el.onclick = () => { if (currentTab === 'game') uiAction(u); };
+      L.appendChild(el);
+    });
+  }
+  function uiDown(e, u) {
+    if (currentTab === 'game') return;
+    e.preventDefault(); e.stopPropagation();
+    pushHistory();
+    selectObject(u.id);
+    const r = document.getElementById('viewportWrap').getBoundingClientRect();
+    const mv = ev => {
+      u.x = rnd(Math.min(100, Math.max(0, (ev.clientX - r.left) / r.width * 100)));
+      u.y = rnd(Math.min(100, Math.max(0, (ev.clientY - r.top) / r.height * 100)));
+      renderUI();
+    };
+    const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); renderInspector(); };
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  }
+  function uiAction(u) {
+    if (u.action === 'log') logConsole('info', 'UI ' + u.name + ': ' + (u.target || u.text));
+    else if (u.action === 'toggle') { const o = Object.values(objectMap).find(x => x.data.name === u.target); if (o) toggleVisibility(o.data.id); else logConsole('warn', 'Objeto não encontrado: ' + u.target); }
+    else if (u.action === 'stop') stopPlay();
+  }
+  function selectUI(id) {
+    if (selectedId && objectMap[selectedId]) setEmissive(objectMap[selectedId].mesh, 0x000000);
+    transformControls.detach();
+    selectedId = id;
+    document.getElementById('selectedName').textContent = uiMap[id].name;
+    rebuildHierarchy(); renderInspector(); renderUI();
+  }
+  function renderUIInspector() {
+    const u = uiMap[selectedId];
+    const f = (k, l, t) => `<div class="prop"><label>${l}</label><input type="${t || 'text'}" value="${esc(u[k])}" onchange="updateUI('${k}',this.value)"></div>`;
+    document.getElementById('inspector').innerHTML = `<div class="insp-section"><h4>UI • ${esc(u.kind)}</h4>
+      ${f('name', 'Name')}${f('text', 'Text')}${f('x', 'X %', 'number')}${f('y', 'Y %', 'number')}${f('w', 'Width', 'number')}${f('h', 'Height', 'number')}${f('size', 'Font', 'number')}${f('color', 'Color', 'color')}${f('bg', 'Background')}
+      <div class="prop"><label>OnClick</label><select onchange="updateUI('action',this.value)">${['none', 'log', 'toggle', 'stop'].map(a => `<option ${u.action === a ? 'selected' : ''}>${a}</option>`).join('')}</select></div>
+      ${f('target', 'Target')}
+      <div class="prop"><label>Visible</label><input type="checkbox" ${u.visible ? 'checked' : ''} onchange="updateUI('visible',this.checked)"></div>
+      <div style="font-size:11px;color:#777;margin-top:6px">log: mostra Target no console • toggle: oculta/mostra o objeto com o nome em Target • stop: para o Play. No Game, Esc libera o mouse para clicar.</div></div>`;
+  }
+  function updateUI(k, v) {
+    const u = uiMap[selectedId];
+    if (!u) return;
+    pushHistory();
+    u[k] = ['x', 'y', 'w', 'h', 'size'].includes(k) ? (parseFloat(v) || 0) : v;
+    renderUI();
+    if (k === 'name') rebuildHierarchy();
+  }
+
+  // ---- Animacao: clips = { duracao, loop, tracks: { bone: [[t, rotX, rotY, rotZ(graus)], ...] } } ----
+  const DEFAULT_CLIPS = {
+    Idle: { duration: 2, loop: true, tracks: {
+      Torso: [[0, 0, 0, 0], [1, 2, 0, 0], [2, 0, 0, 0]], Head: [[0, 0, 0, 0], [1, -3, 0, 0], [2, 0, 0, 0]],
+      ArmL: [[0, 0, 0, 4], [1, 0, 0, 7], [2, 0, 0, 4]], ArmR: [[0, 0, 0, -4], [1, 0, 0, -7], [2, 0, 0, -4]] } },
+    Walk: { duration: 0.8, loop: true, tracks: {
+      LegL: [[0, 35, 0, 0], [0.4, -35, 0, 0], [0.8, 35, 0, 0]], LegR: [[0, -35, 0, 0], [0.4, 35, 0, 0], [0.8, -35, 0, 0]],
+      ArmL: [[0, -30, 0, 3], [0.4, 30, 0, 3], [0.8, -30, 0, 3]], ArmR: [[0, 30, 0, -3], [0.4, -30, 0, -3], [0.8, 30, 0, -3]],
+      Torso: [[0, 4, 0, 0], [0.8, 4, 0, 0]] } },
+    Jump: { duration: 0.6, loop: false, tracks: {
+      ArmL: [[0, 0, 0, 0], [0.3, 150, 0, 8], [0.6, 150, 0, 8]], ArmR: [[0, 0, 0, 0], [0.3, 150, 0, -8], [0.6, 150, 0, -8]],
+      LegL: [[0, 0, 0, 0], [0.3, 25, 0, 0], [0.6, 25, 0, 0]], LegR: [[0, 0, 0, 0], [0.3, -20, 0, 0], [0.6, -20, 0, 0]] } }
+  };
+  let animClips = JSON.parse(JSON.stringify(DEFAULT_CLIPS));
+  let animCur = 'Idle', animBone = '', animT = 0, animPreviewOn = false;
+
+  function sampleTrack(keys, t) {
+    if (!keys.length) return [0, 0, 0];
+    if (t <= keys[0][0]) return keys[0].slice(1);
+    for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) {
+      const a = keys[i - 1], b = keys[i], k = (t - a[0]) / ((b[0] - a[0]) || 1);
+      return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k];
+    }
+    return keys[keys.length - 1].slice(1);
+  }
+  function applyPose(root, clip, t) {
+    root.traverse(n => { if (n.userData.bind) n.rotation.copy(n.userData.bind); });
+    const D = Math.PI / 180;
+    Object.entries(clip.tracks).forEach(([bone, keys]) => {
+      const n = root.getObjectByName(bone);
+      if (!n || n === root) return;
+      if (!n.userData.bind) n.userData.bind = n.rotation.clone();
+      const r = sampleTrack(keys, t);
+      n.rotation.set(n.userData.bind.x + r[0] * D, n.userData.bind.y + r[1] * D, n.userData.bind.z + r[2] * D);
+    });
+  }
+  function resetAllPoses() { Object.values(objectMap).forEach(o => o.mesh.traverse(n => { if (n.userData.bind) n.rotation.copy(n.userData.bind); })); }
+
+  // Play: objetos com componente Animator tocam seu clip; o Player escolhe Idle/Walk/Jump sozinho
+  function tickAnimators(dt, playerClip) {
+    Object.values(objectMap).forEach(o => {
+      const c = o.components.find(x => x.type === 'Animator');
+      if (!c) return;
+      const id = o.data.id, name = id === playerId ? playerClip : c.props.clip, clip = animClips[name];
+      if (!clip) return;
+      const st = animState[id] || (animState[id] = { t: 0, name });
+      if (st.name !== name) { st.name = name; st.t = 0; }
+      st.t += dt * (parseFloat(c.props.speed) || 1);
+      if (!clip.loop && st.t > clip.duration) st.t = clip.duration;
+      applyPose(o.mesh, clip, clip.loop ? st.t % clip.duration : st.t);
+    });
+  }
+
+  // Editor de animacao
+  const animTargetObj = () => objectMap[selectedId] || objectMap[playerId] || null;
+  function animBones(root) { const a = []; root.traverse(n => { if (n !== root && n.name) a.push(n.name); }); return a; }
+  function renderAnimPanel() {
+    const names = Object.keys(animClips);
+    if (!animClips[animCur]) animCur = names[0];
+    const clip = animClips[animCur], o = animTargetObj();
+    if (!clip) return;
+    document.getElementById('animTarget').textContent = o ? o.data.name : '— selecione um objeto —';
+    document.getElementById('animClipSel').innerHTML = names.map(k => `<option ${k === animCur ? 'selected' : ''}>${esc(k)}</option>`).join('');
+    const bones = o ? animBones(o.mesh) : [];
+    if (!bones.includes(animBone)) animBone = bones[0] || '';
+    document.getElementById('animBoneSel').innerHTML = bones.map(b => `<option ${b === animBone ? 'selected' : ''}>${esc(b)}</option>`).join('');
+    document.getElementById('animDur').value = clip.duration;
+    document.getElementById('animLoop').checked = !!clip.loop;
+    document.getElementById('animTime').max = clip.duration;
+    animScrub(Math.min(animT, clip.duration), true);
+    const keys = clip.tracks[animBone] || [];
+    document.getElementById('animKeys').innerHTML = keys.map((k, i) =>
+      `<div class="key-row" onclick="animScrub(${k[0]},true)"><span style="width:46px">${k[0].toFixed(2)}s</span><span style="flex:1">${k.slice(1).map(v => Math.round(v * 10) / 10).join(', ')}</span><span style="color:#ff6b6b" onclick="event.stopPropagation();animDelKey(${i})">✕</span></div>`).join('')
+      || '<div style="color:#666;font-size:11px">Sem keys neste bone</div>';
+  }
+  function animScrub(t, upd) {
+    animT = parseFloat(t) || 0;
+    document.getElementById('animTimeLbl').textContent = animT.toFixed(2);
+    if (upd) document.getElementById('animTime').value = animT;
+    const o = animTargetObj(), clip = animClips[animCur];
+    if (!o || !clip) return;
+    applyPose(o.mesh, clip, animT);
+    const r = sampleTrack(clip.tracks[animBone] || [], animT);
+    ['animRx', 'animRy', 'animRz'].forEach((id, i) => { document.getElementById(id).value = Math.round(r[i] * 10) / 10; });
+  }
+  function animLive() {   // mostra no modelo o que esta digitado, antes de gravar a key
+    const o = animTargetObj(); if (!o) return;
+    const n = o.mesh.getObjectByName(animBone); if (!n) return;
+    if (!n.userData.bind) n.userData.bind = n.rotation.clone();
+    const v = ['animRx', 'animRy', 'animRz'].map(id => parseFloat(document.getElementById(id).value) || 0), D = Math.PI / 180;
+    n.rotation.set(n.userData.bind.x + v[0] * D, n.userData.bind.y + v[1] * D, n.userData.bind.z + v[2] * D);
+  }
+  function animSetKey() {
+    const clip = animClips[animCur]; if (!clip || !animBone) return;
+    const v = ['animRx', 'animRy', 'animRz'].map(id => parseFloat(document.getElementById(id).value) || 0);
+    const tr = clip.tracks[animBone] || (clip.tracks[animBone] = []);
+    const t = Math.round(animT * 1000) / 1000;
+    const i = tr.findIndex(k => Math.abs(k[0] - t) < 0.01);
+    if (i >= 0) tr.splice(i, 1);
+    tr.push([t, ...v]); tr.sort((a, b) => a[0] - b[0]);
+    renderAnimPanel();
+  }
+  function animDelKey(i) {
+    const clip = animClips[animCur], tr = clip.tracks[animBone];
+    if (!tr) return;
+    tr.splice(i, 1);
+    if (!tr.length) delete clip.tracks[animBone];
+    renderAnimPanel();
+  }
+  function animSelectClip(n) { animCur = n; animT = 0; renderAnimPanel(); }
+  function animSelectBone(b) { animBone = b; renderAnimPanel(); }
+  function animSetDur(v) { animClips[animCur].duration = Math.max(0.1, parseFloat(v) || 1); renderAnimPanel(); }
+  function animSetLoop(b) { animClips[animCur].loop = b; }
+  function animNewClip() {
+    const n = (prompt('Nome da nova animação:') || '').trim();
+    if (!n || animClips[n]) return;
+    animClips[n] = { duration: 1, loop: true, tracks: {} }; animCur = n; animT = 0; renderAnimPanel();
+  }
+  function animDupClip() {
+    let n = animCur + '_copy'; while (animClips[n]) n += '_';
+    animClips[n] = JSON.parse(JSON.stringify(animClips[animCur])); animCur = n; renderAnimPanel();
+  }
+  function animDelClip() {
+    if (Object.keys(animClips).length < 2) { logConsole('warn', 'Mantenha ao menos uma animação'); return; }
+    if (!confirm('Excluir a animação "' + animCur + '"?')) return;
+    delete animClips[animCur]; animCur = Object.keys(animClips)[0]; animT = 0; renderAnimPanel();
+  }
+  function animPreview() {
+    animPreviewOn = !animPreviewOn;
+    document.getElementById('animPlayBtn').textContent = animPreviewOn ? '■ Parar' : '▶ Preview';
+  }
+  function animEditorTick(dt) {
+    if (!animPreviewOn) return;
+    const clip = animClips[animCur]; if (!clip) return;
+    animT += dt;
+    if (animT > clip.duration) { if (clip.loop) animT %= clip.duration; else { animT = clip.duration; animPreviewOn = false; document.getElementById('animPlayBtn').textContent = '▶ Preview'; } }
+    animScrub(animT, true);
+  }
+
+  // ========== PROJETO: SALVAR / CARREGAR (IndexedDB + JSON) ==========
+  const LAST_KEY = 'engine:lastProject';
+  const GEO_OK = ['BoxGeometry', 'SphereGeometry', 'PlaneGeometry', 'CylinderGeometry', 'ConeGeometry'];
+  const DEFAULT_SCRIPTS = JSON.parse(JSON.stringify(scripts));
+  const assetBlobs = {};   // 'obj_3|model' / 'obj_3|tex' -> File (modelos e texturas importados)
+  let projectName = '';
+  let _db = null;
+
+  function openDB() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) return reject(new Error('IndexedDB indisponivel'));
+      const r = indexedDB.open('engine-db', 1);
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore('projects', { keyPath: 'name' });
+        r.result.createObjectStore('assets', { keyPath: 'id' });
+      };
+      r.onsuccess = () => { _db = r.result; resolve(_db); };
+      r.onerror = () => reject(r.error);
+    });
+  }
+  function idbRun(stores, mode, fn) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(stores, mode);
+      const out = fn(tx);
+      tx.oncomplete = () => resolve(out);
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('transacao abortada'));
+    }));
+  }
+  const assetRange = n => IDBKeyRange.bound(n + '|', n + '|\uffff');
+
+  function dbSave(name, project, assets) {
+    return idbRun(['projects', 'assets'], 'readwrite', tx => {
+      const as = tx.objectStore('assets');
+      as.delete(assetRange(name));
+      Object.entries(assets).forEach(([k, b]) => as.put({ id: name + '|' + k, blob: b }));
+      tx.objectStore('projects').put({ name, savedAt: Date.now(), project });
+    });
+  }
+  async function dbLoad(name) {
+    const r = await idbRun(['projects', 'assets'], 'readonly', tx => ({
+      p: tx.objectStore('projects').get(name),
+      a: tx.objectStore('assets').getAll(assetRange(name))
+    }));
+    if (!r.p.result) throw new Error('projeto nao encontrado');
+    const blobs = {};
+    r.a.result.forEach(x => { blobs[x.id.slice(name.length + 1)] = x.blob; });
+    return { project: r.p.result.project, blobs };
+  }
+  function dbList() {
+    return idbRun(['projects'], 'readonly', tx => tx.objectStore('projects').getAll()).then(req => req.result);
+  }
+  function dbDelete(name) {
+    return idbRun(['projects', 'assets'], 'readwrite', tx => {
+      tx.objectStore('projects').delete(name);
+      tx.objectStore('assets').delete(assetRange(name));
+    });
+  }
+
+  // ---- serializar / restaurar cena ----
+  function serializeScene() {
+    const ed = document.getElementById('codeEditor');
+    if (ed) scripts[currentScript] = ed.value;
+    const objects = Object.values(objectMap).map(o => {
+      const m = o.mesh, d = o.data;
+      const rec = { data: JSON.parse(JSON.stringify(d)), components: JSON.parse(JSON.stringify(o.components)) };
+      rec.data.pos = [m.position.x, m.position.y, m.position.z];
+      rec.data.rot = [THREE.MathUtils.radToDeg(m.rotation.x), THREE.MathUtils.radToDeg(m.rotation.y), THREE.MathUtils.radToDeg(m.rotation.z)];
+      rec.data.scale = [m.scale.x, m.scale.y, m.scale.z];
+      if (m.isMesh) {
+        const g = m.geometry;
+        if (g && g.parameters && GEO_OK.includes(g.type)) rec.geo = { type: g.type, params: Object.values(g.parameters) };
+        const mat = m.material;
+        if (mat && mat.color) rec.mat = { color: mat.color.getHex(), roughness: mat.roughness, metalness: mat.metalness };
+      }
+      return rec;
+    });
+    const cp = editorCamPos || camera.position, ct = editorCamTarget || controls.target;
+    return {
+      format: 'engine-project', version: 1, savedAt: Date.now(),
+      nextId, playerId, objects,
+      camera: { pos: cp.toArray(), target: ct.toArray() },
+      scripts: JSON.parse(JSON.stringify(scripts)),
+      ui: JSON.parse(JSON.stringify(Object.values(uiMap))), nextUiId, animClips: JSON.parse(JSON.stringify(animClips))
+    };
+  }
+
+  function clearScene() {
+    transformControls.detach();
+    Object.values(objectMap).forEach(o => {
+      if (o.mesh.parent) o.mesh.parent.remove(o.mesh);
+      o.mesh.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) (Array.isArray(c.material) ? c.material : [c.material]).forEach(mt => mt.dispose());
+      });
+    });
+    Object.keys(objectMap).forEach(k => delete objectMap[k]);
+    Object.keys(uiMap).forEach(k => delete uiMap[k]);
+    animState = {};
+    selectedId = null;
+    playerId = null;
+  }
+
+  function rekey(oldId, newId) {
+    const o = objectMap[oldId];
+    if (!o) throw new Error('objeto nao encontrado');
+    delete objectMap[oldId];
+    o.data.id = newId;
+    o.mesh.userData.id = newId;
+    objectMap[newId] = o;
+    if (playerId === oldId) playerId = newId;
+    return newId;
+  }
+
+  async function restoreObject(rec) {
+    const d = rec.data, comps = Array.isArray(rec.components) ? rec.components : [];
+    const v3 = a => Array.isArray(a) && a.length === 3 && a.every(Number.isFinite);
+    if (!d || !/^obj_\d+$/.test(d.id) || !v3(d.pos) || !v3(d.rot) || !v3(d.scale)) throw new Error('registro de objeto inválido');
+    let id;
+    if (d.model) {
+      const blob = assetBlobs[d.id + '|model'];
+      if (!blob) throw new Error('arquivo do modelo ausente');
+      const model = await loadModelBlob(blob, d.model.ext);
+      model.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+      id = createObject(d.name, d.type, model, comps, d.id);
+    } else if (d.type === 'Terrain' || d.type === 'Character' || d.type === 'Camera') {
+      ({ Terrain: createTerrain, Character: createPlayer, Camera: createCameraMarker })[d.type]();
+      id = rekey('obj_' + (nextId - 1), d.id);
+    } else if (d.type === 'Empty') {
+      const g = new THREE.Group(); g.add(new THREE.AxesHelper(0.6));
+      id = createObject(d.name, d.type, g, comps, d.id);
+    } else if (rec.geo && GEO_OK.includes(rec.geo.type)) {
+      const Cls = THREE[rec.geo.type.replace('Geometry', 'BufferGeometry')];
+      const mesh = new THREE.Mesh(new Cls(...rec.geo.params), new THREE.MeshStandardMaterial());
+      id = createObject(d.name, d.type, mesh, comps, d.id);
+    } else {
+      throw new Error('tipo de objeto nao reconhecido');
+    }
+    const o = objectMap[id], m = o.mesh;
+    o.data = Object.assign({}, d, { id });
+    if (d.type === 'Character' && !comps.some(c => c.type === 'Animator')) comps.push({ type: 'Animator', props: { clip: 'Idle', speed: 1 } });
+    o.components = comps;
+    m.position.fromArray(d.pos);
+    m.rotation.set(THREE.MathUtils.degToRad(d.rot[0]), THREE.MathUtils.degToRad(d.rot[1]), THREE.MathUtils.degToRad(d.rot[2]));
+    m.scale.fromArray(d.scale);
+    m.visible = d.visible !== false;
+    if (rec.mat && m.isMesh && m.material && m.material.color) {
+      m.material.color.setHex(rec.mat.color);
+      if (rec.mat.roughness != null && m.material.roughness != null) m.material.roughness = rec.mat.roughness;
+      if (rec.mat.metalness != null && m.material.metalness != null) m.material.metalness = rec.mat.metalness;
+    }
+    if (d.colorOverride) {
+      m.traverse(c => { if (c.isMesh && c.material) { c.material = c.material.clone(); c.material.color.set(d.colorOverride); } });
+    }
+    const tex = assetBlobs[id + '|tex'];
+    if (tex) await loadTextureOnObject(id, tex);
+    const mr = comps.find(c => c.type === 'MeshRenderer');
+    if (!tex && mr && mr.props && String(mr.props.texture || '').startsWith('preset:')) applyPreset(id, mr.props.texture.slice(7), true);
+    applyTiling(id);
+  }
+
+  async function applyProject(proj, blobs, name) {
+    if (isPlaying) stopPlay();
+    clearScene();
+    Object.keys(assetBlobs).forEach(k => delete assetBlobs[k]);
+    Object.assign(assetBlobs, blobs);
+    nextId = 1000000;   // ids temporarios dos objetos built-in (depois re-chaveados)
+    let failed = 0;
+    for (const rec of (proj.objects || [])) {
+      try { await restoreObject(rec); }
+      catch (err) { failed++; logConsole('error', 'Falha ao restaurar "' + (rec.data && rec.data.name) + '": ' + (err.message || err)); }
+    }
+    Object.values(objectMap).forEach(o => { const pr = o.data.parent; if (pr && objectMap[pr]) objectMap[pr].mesh.add(o.mesh); else o.data.parent = null; });
+    (Array.isArray(proj.ui) ? proj.ui : []).filter(u => u && /^ui_\d+$/.test(u.id)).forEach(u => { uiMap[u.id] = u; });
+    nextUiId = proj.nextUiId || (Object.keys(uiMap).length + 1);
+    animClips = proj.animClips || JSON.parse(JSON.stringify(DEFAULT_CLIPS));
+    renderUI();
+    const maxN = Math.max(0, ...Object.keys(objectMap).map(k => parseInt(k.replace('obj_', ''), 10) || 0));
+    nextId = Math.max(proj.nextId || 1, maxN + 1);
+    if (proj.playerId && objectMap[proj.playerId]) playerId = proj.playerId;
+    if (proj.scripts) {
+      Object.keys(scripts).forEach(k => delete scripts[k]);
+      Object.assign(scripts, proj.scripts);
+      document.getElementById('codeEditor').value = scripts[currentScript] || '';
+    }
+    if (proj.camera && !editorCamPos) {
+      camera.position.fromArray(proj.camera.pos);
+      controls.target.fromArray(proj.camera.target);
+      controls.update();
+    }
+    projectName = name;
+    updateProjectLabel();
+    selectObject(null);
+    if (failed) logConsole('warn', failed + ' objeto(s) nao puderam ser restaurados');
+  }
+
+  // ---- acoes de projeto ----
+  function updateProjectLabel() {
+    document.getElementById('projectLabel').textContent = projectName || 'Sem título';
+  }
+
+  async function saveProject(name) {
+    if (isPlaying) { logConsole('warn', 'Pare o Play (■) antes de salvar'); setStatus('Pare o Play antes de salvar'); return; }
+    name = String(name || projectName || '').trim().replace(/\|/g, '-');
+    if (!name) { openProjModal(); setStatus('Dê um nome ao projeto para salvar'); return; }
+    try {
+      const proj = serializeScene();
+      proj.name = name;
+      const assets = {};
+      Object.keys(assetBlobs).forEach(k => { if (objectMap[k.split('|')[0]]) assets[k] = assetBlobs[k]; });
+      await dbSave(name, proj, assets);
+      projectName = name;
+      updateProjectLabel();
+      try { localStorage.setItem(LAST_KEY, name); } catch (e) {}
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+      logConsole('info', 'Projeto "' + name + '" salvo (' + proj.objects.length + ' objetos)');
+      setStatus('Projeto salvo: ' + name);
+    } catch (err) {
+      logConsole('error', 'Erro ao salvar: ' + (err.message || err));
+      setStatus('Erro ao salvar projeto');
+    }
+  }
+
+  async function loadProject(name) {
+    const { project, blobs } = await dbLoad(name);
+    await applyProject(project, blobs, name);
+    try { localStorage.setItem(LAST_KEY, name); } catch (e) {}
+    logConsole('info', 'Projeto "' + name + '" carregado');
+    setStatus('Projeto carregado: ' + name);
+  }
+
+  async function autoLoadLast() {
+    let name = null;
+    try { name = localStorage.getItem(LAST_KEY); } catch (e) {}
+    if (!name) return;
+    try { await loadProject(name); }
+    catch (err) { logConsole('warn', 'Nao foi possivel reabrir "' + name + '": ' + (err.message || err)); }
+  }
+
+  function newProject() {
+    if (!confirm('Novo projeto? A cena atual será perdida (projetos já salvos não são afetados).')) return;
+    if (isPlaying) stopPlay();
+    clearScene();
+    Object.keys(assetBlobs).forEach(k => delete assetBlobs[k]);
+    Object.keys(scripts).forEach(k => delete scripts[k]);
+    Object.assign(scripts, JSON.parse(JSON.stringify(DEFAULT_SCRIPTS)));
+    document.getElementById('codeEditor').value = scripts[currentScript] || '';
+    nextId = 1; nextUiId = 1;
+    animClips = JSON.parse(JSON.stringify(DEFAULT_CLIPS));
+    createTerrain(); createArches(); createPlayer(); createCameraMarker();
+    projectName = '';
+    updateProjectLabel();
+    try { localStorage.removeItem(LAST_KEY); } catch (e) {}
+    selectObject(null);
+    logConsole('info', 'Novo projeto criado');
+  }
+
+  // ---- exportar / importar arquivo .json (autocontido, com assets em base64) ----
+  const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
+
+  async function exportProjectFile() {
+    if (isPlaying) { logConsole('warn', 'Pare o Play (■) antes de exportar'); return; }
+    try {
+      const proj = serializeScene();
+      proj.name = projectName || 'projeto';
+      proj.assets = {};
+      for (const k of Object.keys(assetBlobs)) {
+        if (!objectMap[k.split('|')[0]]) continue;
+        const b = assetBlobs[k];
+        proj.assets[k] = { name: b.name || '', type: b.type || '', data: await blobToDataURL(b) };
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(proj)], { type: 'application/json' }));
+      a.download = (proj.name.replace(/[^\w\-]+/g, '_') || 'projeto') + '.engine.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      logConsole('info', 'Projeto exportado: ' + a.download);
+    } catch (err) { logConsole('error', 'Erro ao exportar: ' + (err.message || err)); }
+  }
+
+  async function importProjectFile(event) {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const proj = JSON.parse(await file.text());
+      if (proj.format !== 'engine-project') throw new Error('o arquivo não é um projeto desta engine');
+      const blobs = {};
+      for (const [k, a] of Object.entries(proj.assets || {})) {
+        const b = await (await fetch(a.data)).blob();
+        blobs[k] = new File([b], a.name || k, { type: a.type || b.type });
+      }
+      closeProjModal();
+      await applyProject(proj, blobs, proj.name || file.name.replace(/\.json$/i, ''));
+      logConsole('info', 'Projeto importado de ' + file.name + ' (use Salvar para guardá-lo no navegador)');
+    } catch (err) { logConsole('error', 'Erro ao importar projeto: ' + (err.message || err)); }
+  }
+
+  // ---- modal de projetos ----
+  function openProjModal() {
+    document.getElementById('projNameInput').value = projectName;
+    document.getElementById('projModal').classList.add('show');
+    renderProjList();
+  }
+  function closeProjModal() { document.getElementById('projModal').classList.remove('show'); }
+
+  async function saveFromModal() {
+    const name = document.getElementById('projNameInput').value.trim().replace(/\|/g, '-');
+    if (!name) return;
+    if (name !== projectName) {
+      const list = await dbList().catch(() => []);
+      if (list.some(p => p.name === name) && !confirm('Já existe um projeto chamado "' + name + '". Substituir?')) return;
+    }
+    await saveProject(name);
+    closeProjModal();
+  }
+
+  async function renderProjList() {
+    const list = document.getElementById('projList');
+    list.textContent = '';
+    let items;
+    try { items = await dbList(); }
+    catch (e) { list.innerHTML = '<div class="proj-empty">IndexedDB indisponível neste navegador.</div>'; return; }
+    if (!items.length) { list.innerHTML = '<div class="proj-empty">Nenhum projeto salvo ainda.</div>'; return; }
+    items.sort((a, b) => b.savedAt - a.savedAt).forEach(it => {
+      const row = document.createElement('div'); row.className = 'proj-row';
+      const info = document.createElement('div'); info.className = 'proj-info';
+      const n = document.createElement('div'); n.className = 'proj-name'; n.textContent = it.name;
+      const dt = document.createElement('div'); dt.className = 'proj-date';
+      dt.textContent = new Date(it.savedAt).toLocaleString() + ' • ' + ((it.project.objects || []).length) + ' objetos';
+      info.append(n, dt);
+      const open = document.createElement('button'); open.className = 'open'; open.textContent = 'Abrir';
+      open.onclick = async () => {
+        if (!confirm('Abrir "' + it.name + '"? A cena atual não salva será perdida.')) return;
+        closeProjModal();
+        try { await loadProject(it.name); } catch (err) { logConsole('error', 'Erro ao abrir: ' + (err.message || err)); }
+      };
+      const del = document.createElement('button'); del.textContent = '🗑'; del.title = 'Excluir projeto';
+      del.onclick = async () => {
+        if (!confirm('Excluir o projeto "' + it.name + '" do navegador?')) return;
+        await dbDelete(it.name);
+        try { if (localStorage.getItem(LAST_KEY) === it.name) localStorage.removeItem(LAST_KEY); } catch (e) {}
+        renderProjList();
+      };
+      row.append(info, open, del);
+      list.appendChild(row);
+    });
+  }
+
+  window.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveProject(); }
+  });
 
   // ========== UTILS ==========
   function onResize() {
@@ -1071,6 +2006,7 @@
   function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
+    if (currentTab === 'anim') animEditorTick(dt);
 
     if (isPlaying || currentTab === 'game') {
       if (isPlaying) updateGameplay(dt);
@@ -1100,8 +2036,6 @@
     c.scrollTop = c.scrollHeight;
   }
 
-  function saveProject() { logConsole('info', 'Projeto salvo (simulado)'); setStatus('Projeto salvo'); }
-  function newProject() { if (confirm('Novo projeto? A cena atual será perdida.')) location.reload(); }
   function exportGame() { showModal('Exportar', 'Em uma engine completa você exportaria APK/AAB. Aqui ainda é protótipo web.'); }
   function showModal(t, m) {
     document.getElementById('modalTitle').textContent = t;
@@ -1121,6 +2055,7 @@
     }
     try {
       initThree();
+      autoLoadLast();
     } catch (err) {
       console.error(err);
       setStatus('Erro: ' + err.message);
